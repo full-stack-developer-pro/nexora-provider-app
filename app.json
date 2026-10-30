@@ -1,36 +1,45 @@
 {
   "expo": {
-    "name": "nexora-provider-app",
+    "name": "Nexora Partner",
     "slug": "nexora-provider-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "nexoraproviderapp",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/images/icon.png"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#041427",
+        "foregroundImage": "./assets/images/icon.png"
       },
+      "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false
     },
+    "androidStatusBar": {
+      "backgroundColor": "#041427",
+      "translucent": false,
+      "barStyle": "light-content"
+    },
+    "androidNavigationBar": {
+      "visible": "always",
+      "backgroundColor": "#ffffff",
+      "barStyle": "dark-content"
+    },
     "web": {
-      "output": "server",
-      "favicon": "./assets/images/favicon.png"
+      "output": "static",
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "backgroundColor": "#041427",
+          "image": "./assets/images/nexora-logo.png",
+          "imageWidth": 128
         }
       ]
     ],
