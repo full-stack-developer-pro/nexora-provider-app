@@ -135,11 +135,10 @@ export const NexoraTabBar: React.FC<NexoraTabBarProps> = ({
         [{ text: 'OK' }]
       );
     } else if (type === 'product') {
-      if (navigation?.navigate) {
-        navigation.navigate('catalog');
-      } else {
-        router.push('/(tabs)/catalog');
-      }
+      router.push({
+        pathname: '/(tabs)/catalog',
+        params: { action: 'new' }
+      });
     } else if (type === 'invoice') {
       Alert.alert(
         'Generate Instant Invoice',

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,105 +9,416 @@ import {
   Alert,
   Platform,
   KeyboardAvoidingView,
+  ActivityIndicator,
+  RefreshControl,
+  TextInput,
+  Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import {
   Package,
   Plus,
   Tag,
   Boxes,
+  Check,
   CheckCircle2,
   DollarSign,
   X,
-  ShoppingBag,
+  Search,
+  AlertTriangle,
+  Trash2,
+  Truck,
+  Building2,
   Layers,
-  ArrowRight
+  ChevronDown,
+  ChevronRight,
+  TrendingDown,
+  Barcode,
+  Camera,
+  Image as ImageIcon,
 } from 'lucide-react-native';
 import { NexoraColors, Radius, Shadows } from '@/constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams } from 'expo-router';
 import { NexoraInput } from '@/components/common/NexoraInput';
 import { NexoraButton } from '@/components/common/NexoraButton';
-
-interface ProductItem {
-  id: string;
-  name: string;
-  category: string;
-  price: string;
-  stock: number;
-  commission: string;
-  status: 'active' | 'in_review';
-}
+import productService, { Product, CreateProductInput } from '@/services/productService';
+import categoryService, { ProductCategory } from '@/services/categoryService';
+import { ProductCardSkeleton } from '@/components/common/NexoraShimmer';
 
 export default function CatalogScreen() {
   const insets = useSafeAreaInsets();
-  const [products, setProducts] = useState<ProductItem[]>([
-    {
-      id: 'prod_1',
-      name: 'Commercial Grade PEX-A Pipe Coil (100ft)',
-      category: 'Plumbing Fixtures & Supplies',
-      price: '$89.00',
-      stock: 42,
-      commission: '10%',
-      status: 'active',
-    },
-    {
-      id: 'prod_2',
-      name: 'Brass Ball Valve 3/4" Full Port (Pack of 5)',
-      category: 'Plumbing Fixtures & Supplies',
-      price: '$45.50',
-      stock: 18,
-      commission: '10%',
-      status: 'active',
-    },
-    {
-      id: 'prod_3',
-      name: 'Digital Water Pressure Gauge (0-160 PSI)',
-      category: 'Power Tools & Equipment',
-      price: '$34.00',
-      stock: 9,
-      commission: '10%',
-      status: 'in_review',
-    },
-  ]);
+  const params = useLocalSearchParams();
 
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [stockUpdatingId, setStockUpdatingId] = useState<string | null>(null);
+
+  // Screen Filters & Debouncing
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
+
+  // Server-level inventory aggregation KPIs
+  const [sellerStats, setSellerStats] = useState({
+    total: 0,
+    totalUnits: 0,
+    inStock: 0,
+    lowStock: 0,
+  });
+
+  // Debounce search query to search across entire database on server
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Modal State
   const [modalVisible, setModalVisible] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newCategory, setNewCategory] = useState('Plumbing Fixtures & Supplies');
-  const [newPrice, setNewPrice] = useState('');
-  const [newStock, setNewStock] = useState('20');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleAddProduct = () => {
-    if (!newName.trim() || !newPrice.trim()) {
-      Alert.alert('Required Fields', 'Please enter product name and retail price.');
+  // Form Fields
+  const [formName, setFormName] = useState('');
+  const [formDescription, setFormDescription] = useState('');
+  const [formSku, setFormSku] = useState('');
+  const [formCategoryId, setFormCategoryId] = useState('');
+  const [formSubcategory, setFormSubcategory] = useState('');
+  const [formPrice, setFormPrice] = useState('');
+  const [formComparePrice, setFormComparePrice] = useState('');
+  const [formStock, setFormStock] = useState('20');
+  const [formLowStock, setFormLowStock] = useState('5');
+  const [formFeaturedImage, setFormFeaturedImage] = useState<string | null>(null);
+  const [formGalleryImages, setFormGalleryImages] = useState<string[]>([]);
+  const [formPickup, setFormPickup] = useState(true);
+  const [formDelivery, setFormDelivery] = useState(false);
+  const [formDeliveryFee, setFormDeliveryFee] = useState('10');
+  const [formShipping, setFormShipping] = useState(false);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // Autocomplete Category Dropdown in Modal
+  const [catDropdownOpen, setCatDropdownOpen] = useState(false);
+  const [catSearchQuery, setCatSearchQuery] = useState('');
+
+  // Auto-open modal if triggered via Quick Action (?action=new)
+  useEffect(() => {
+    if (params.action === 'new') {
+      setModalVisible(true);
+    }
+  }, [params.action]);
+
+  // Load Store Categories on mount
+  useEffect(() => {
+    categoryService
+      .getProductCategories()
+      .then((cats) => {
+        setCategories(cats || []);
+        setFormCategoryId((prev) => {
+          if (!prev && cats && cats.length > 0) {
+            const sub = cats[0].subcategories?.[0]?.name || '';
+            setFormSubcategory(sub);
+            return cats[0]._id;
+          }
+          return prev;
+        });
+      })
+      .catch((err) => console.warn('Failed to load categories:', err?.message));
+  }, []);
+
+  // Fetch Products & Aggregation Stats directly from Server with server-level filters
+  const fetchProducts = useCallback(async (search: string, catId: string) => {
+    try {
+      const prodRes = await productService.getMyProducts({
+        search: search.trim() || undefined,
+        category: catId !== 'all' ? catId : undefined,
+        limit: 50,
+      });
+
+      setProducts(prodRes?.products || []);
+      if (prodRes?.stats) {
+        setSellerStats(prodRes.stats);
+      }
+    } catch (err: any) {
+      console.warn('Failed to load seller products from server:', err?.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchProducts(debouncedSearch, selectedCategoryId).finally(() => {
+      setLoading(false);
+      setRefreshing(false);
+    });
+  }, [debouncedSearch, selectedCategoryId, fetchProducts]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchProducts(debouncedSearch, selectedCategoryId).finally(() => {
+      setRefreshing(false);
+    });
+  };
+
+  // Pick Featured Cover Photo (Required)
+  const handlePickFeaturedImage = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Permission Required',
+          'Camera roll access is needed to attach photos to your product listings.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setFormFeaturedImage(result.assets[0].uri);
+        if (formErrors.featuredImage) {
+          setFormErrors((prev) => ({ ...prev, featuredImage: '' }));
+        }
+      }
+    } catch (err: any) {
+      Alert.alert('Image Error', err?.message || 'Could not pick featured photo.');
+    }
+  };
+
+  const handleRemoveFeaturedImage = () => {
+    setFormFeaturedImage(null);
+  };
+
+  // Pick Optional Gallery Photos (Up to 5)
+  const handlePickGalleryImage = async () => {
+    if (formGalleryImages.length >= 5) {
+      Alert.alert('Maximum Limit', 'You can upload up to 5 optional gallery photos.');
       return;
     }
 
-    const newItem: ProductItem = {
-      id: 'prod_' + Date.now().toString(36),
-      name: newName.trim(),
-      category: newCategory,
-      price: `$${parseFloat(newPrice).toFixed(2)}`,
-      stock: parseInt(newStock, 10) || 1,
-      commission: '10%',
-      status: 'active',
-    };
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Permission Required',
+          'Camera roll access is needed to attach photos to your product listings.'
+        );
+        return;
+      }
 
-    setProducts((prev) => [newItem, ...prev]);
-    setNewName('');
-    setNewPrice('');
-    setNewStock('20');
-    setModalVisible(false);
-    Alert.alert('Product Published', 'Item is now live in the Nexora physical goods marketplace catalog!');
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const uri = result.assets[0].uri;
+        setFormGalleryImages((prev) => [...prev, uri]);
+      }
+    } catch (err: any) {
+      Alert.alert('Image Error', err?.message || 'Could not pick gallery photo.');
+    }
   };
+
+  const handleRemoveGalleryImage = (index: number) => {
+    setFormGalleryImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Quick Stock Step (+1 or -1)
+  const handleStockDelta = async (product: Product, delta: number) => {
+    setStockUpdatingId(product._id);
+    try {
+      const updated = await productService.updateStock(product._id, { delta });
+      setProducts((prev) =>
+        prev.map((p) => (p._id === product._id ? { ...p, stock: updated.stock, status: updated.status } : p))
+      );
+      fetchProducts(debouncedSearch, selectedCategoryId);
+    } catch (err: any) {
+      Alert.alert('Update Failed', err?.response?.data?.message || err?.message || 'Could not update stock.');
+    } finally {
+      setStockUpdatingId(null);
+    }
+  };
+
+  // Delete Product Listing
+  const handleDeleteProduct = (product: Product) => {
+    Alert.alert(
+      'Delete Listing',
+      `Are you sure you want to remove "${product.name}" from your storefront?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await productService.deleteProduct(product._id);
+              setProducts((prev) => prev.filter((p) => p._id !== product._id));
+              fetchProducts(debouncedSearch, selectedCategoryId);
+            } catch (err: any) {
+              Alert.alert('Error', err?.response?.data?.message || 'Failed to delete product.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Create Product Handler with Strict Missing Field Alerts
+  const handleCreateProduct = async () => {
+    const errors: Record<string, string> = {};
+    const missing: string[] = [];
+
+    // 1. Featured Cover Image (Required)
+    if (!formFeaturedImage) {
+      errors.featuredImage = 'Product featured cover image is required';
+      missing.push('Product Featured Image');
+    }
+
+    // 2. Product Title (Required)
+    if (!formName.trim()) {
+      errors.name = 'Product title is required';
+      missing.push('Product Title');
+    }
+
+    // 3. Store Category (Required)
+    if (!formCategoryId) {
+      errors.category = 'Store category selection is required';
+      missing.push('Store Category');
+    }
+
+    // 4. Retail Price (Required)
+    if (!formPrice.trim() || isNaN(Number(formPrice)) || Number(formPrice) <= 0) {
+      errors.price = 'Valid retail price greater than $0 is required';
+      missing.push('Retail Price ($)');
+    }
+
+    // 5. Initial Stock (Required)
+    if (!formStock.trim() || isNaN(Number(formStock)) || Number(formStock) < 0) {
+      errors.stock = 'Valid stock quantity (0 or higher) is required';
+      missing.push('Initial Stock Quantity');
+    }
+
+    // Trigger clear alert if any required field was omitted
+    if (missing.length > 0) {
+      setFormErrors(errors);
+      Alert.alert(
+        'Required Fields Missing',
+        `Please complete the following required fields before publishing:\n\n• ${missing.join('\n• ')}`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    setFormErrors({});
+
+    try {
+      // 1. Upload Featured Cover Image (Cloudinary via backend if local file URI)
+      let primaryUrl = formFeaturedImage!;
+      let primaryPublicId: string | undefined = undefined;
+      if (
+        formFeaturedImage &&
+        (formFeaturedImage.startsWith('file:') ||
+          formFeaturedImage.startsWith('content:') ||
+          formFeaturedImage.startsWith('ph:'))
+      ) {
+        const uploadRes = await productService.uploadProductImage(formFeaturedImage);
+        primaryUrl = uploadRes.url;
+        primaryPublicId = uploadRes.publicId;
+      }
+
+      // 2. Upload Optional Gallery Images (Cloudinary via backend if local file URI)
+      const galleryUploaded = await Promise.all(
+        formGalleryImages.map(async (uri) => {
+          if (uri.startsWith('file:') || uri.startsWith('content:') || uri.startsWith('ph:')) {
+            const uploadRes = await productService.uploadProductImage(uri);
+            return { url: uploadRes.url, publicId: uploadRes.publicId, isPrimary: false };
+          }
+          return { url: uri, isPrimary: false };
+        })
+      );
+
+      const imagesPayload = [
+        { url: primaryUrl, publicId: primaryPublicId, isPrimary: true },
+        ...galleryUploaded,
+      ];
+
+      const payload: CreateProductInput = {
+        name: formName.trim(),
+        description: formDescription.trim(),
+        categoryId: formCategoryId,
+        subcategory: formSubcategory.trim(),
+        price: parseFloat(formPrice),
+        compareAtPrice: formComparePrice.trim() ? parseFloat(formComparePrice) : null,
+        stock: parseInt(formStock, 10) || 0,
+        lowStockThreshold: parseInt(formLowStock, 10) || 5,
+        images: imagesPayload,
+        fulfillment: {
+          pickup: formPickup,
+          localDelivery: formDelivery,
+          shipping: formShipping,
+          deliveryFee: formDelivery ? parseFloat(formDeliveryFee) || 0 : 0,
+        },
+      };
+
+      const created = await productService.createProduct(payload);
+      fetchProducts(debouncedSearch, selectedCategoryId);
+
+      // Reset form
+      setFormName('');
+      setFormDescription('');
+      setFormSku('');
+      setFormPrice('');
+      setFormComparePrice('');
+      setFormStock('20');
+      setFormFeaturedImage(null);
+      setFormGalleryImages([]);
+      setCatDropdownOpen(false);
+      setCatSearchQuery('');
+      setModalVisible(false);
+
+      Alert.alert('Product Published', `"${created.name}" is now live in your Nexora storefront!`);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Failed to publish product SKU.';
+      Alert.alert('Error Publishing SKU', msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Filtered categories for autocomplete dropdown in modal
+  const filteredModalCategories = useMemo(() => {
+    if (!catSearchQuery.trim()) return categories;
+    const q = catSearchQuery.toLowerCase().trim();
+    return categories.filter((c) => c.name.toLowerCase().includes(q));
+  }, [categories, catSearchQuery]);
+
+  // Selected Category Object
+  const selectedCategoryObj = categories.find((c) => c._id === formCategoryId);
+
+  // Server-level aggregated KPIs across all seller listings
+  const totalUnits = sellerStats.totalUnits;
+  const lowStockCount = sellerStats.lowStock;
+  const totalSkus = sellerStats.total || products.length;
 
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: Math.max(insets.top, 24) + 26 }]}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 24) + 20 }]}>
         <View style={styles.headerRow}>
           <View style={styles.headerTextWrap}>
             <Text style={styles.title}>Physical Goods Storefront</Text>
             <Text style={styles.subtitle} numberOfLines={2}>
-              Manage multi-vendor catalog inventory & seller fulfillment
+              Manage inventory, live retail pricing & order fulfillment
             </Text>
           </View>
 
@@ -116,91 +427,235 @@ export default function CatalogScreen() {
             onPress={() => setModalVisible(true)}
             activeOpacity={0.8}
           >
-            <Plus size={15} color="#ffffff" strokeWidth={2.5} />
-            <Text style={styles.addBtnText}>Add</Text>
+            <Plus size={16} color="#ffffff" strokeWidth={2.5} />
+            <Text style={styles.addBtnText}>Add SKU</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Search Bar */}
+        <View style={styles.searchBar}>
+          <Search size={16} color={NexoraColors.textMuted} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search products, SKU or parts..."
+            placeholderTextColor={NexoraColors.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <X size={16} color={NexoraColors.textMuted} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        {/* Category Filter Pills (Server-level filter) */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoryPillRow}
+        >
+          <TouchableOpacity
+            style={[styles.catPill, selectedCategoryId === 'all' && styles.catPillActive]}
+            onPress={() => setSelectedCategoryId('all')}
+          >
+            <Text style={[styles.catPillText, selectedCategoryId === 'all' && styles.catPillTextActive]}>
+              All ({totalSkus})
+            </Text>
+          </TouchableOpacity>
+
+          {categories.map((cat) => {
+            const isSelected = selectedCategoryId === cat._id;
+            return (
+              <TouchableOpacity
+                key={cat._id}
+                style={[styles.catPill, isSelected && styles.catPillActive]}
+                onPress={() => setSelectedCategoryId(cat._id)}
+              >
+                <Text style={[styles.catPillText, isSelected && styles.catPillTextActive]}>
+                  {cat.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 20) + 95 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={NexoraColors.primary} />}
       >
-        {/* Catalog Summary */}
+        {/* Catalog Summary KPIs (Aggregated across whole database on server) */}
         <View style={styles.summaryCard}>
           <View style={styles.summaryItem}>
-            <Text style={styles.summaryVal}>{products.length}</Text>
+            <Text style={styles.summaryVal}>{totalSkus}</Text>
             <Text style={styles.summaryLabel}>Active SKUs</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
-            <Text style={styles.summaryVal}>
-              {products.reduce((acc, p) => acc + p.stock, 0)}
-            </Text>
+            <Text style={styles.summaryVal}>{totalUnits}</Text>
             <Text style={styles.summaryLabel}>Units in Stock</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
-            <Text style={styles.summaryVal}>10%</Text>
-            <Text style={styles.summaryLabel}>Platform Fee</Text>
+            <Text style={[styles.summaryVal, lowStockCount > 0 && { color: '#d97706' }]}>
+              {lowStockCount}
+            </Text>
+            <Text style={styles.summaryLabel}>Low Stock</Text>
           </View>
         </View>
 
         {/* Product Cards List */}
-        <Text style={styles.listHeading}>Inventory Catalog ({products.length})</Text>
+        <View style={styles.listHeaderRow}>
+          <Text style={styles.listHeading}>Storefront Listings ({products.length})</Text>
+        </View>
 
-        {products.map((item) => (
-          <View key={item.id} style={styles.productCard}>
-            <View style={styles.productTop}>
-              <View style={styles.productIconBox}>
-                <Package size={20} color={NexoraColors.primary} />
-              </View>
+        {loading ? (
+          <View>
+            <ProductCardSkeleton />
+            <ProductCardSkeleton />
+            <ProductCardSkeleton />
+            <ProductCardSkeleton />
+          </View>
+        ) : products.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Package size={44} color="#94a3b8" />
+            <Text style={styles.emptyTitle}>No Products Found</Text>
+            <Text style={styles.emptySubtext}>
+              {searchQuery || selectedCategoryId !== 'all'
+                ? 'Try adjusting your search or category filters.'
+                : 'Start listing hardware, supplies, and tools to sell in the Nexora marketplace.'}
+            </Text>
+            <TouchableOpacity style={styles.emptyBtn} onPress={() => setModalVisible(true)}>
+              <Plus size={16} color="#ffffff" />
+              <Text style={styles.emptyBtnText}>Add Your First SKU</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          products.map((item) => {
+            const isOutOfStock = (item.stock || 0) <= 0;
+            const isLowStock = !isOutOfStock && (item.stock || 0) <= (item.lowStockThreshold || 5);
+            const isUpdating = stockUpdatingId === item._id;
+            const catName =
+              typeof item.category === 'object' && item.category?.name
+                ? item.category.name
+                : categories.find((c) => c._id === (typeof item.category === 'string' ? item.category : item.category?._id))?.name ||
+                  item.categoryName ||
+                  'General Product';
+            const primaryImageUrl = item.images && item.images.length > 0 ? item.images[0]?.url : null;
 
-              <View style={styles.productMeta}>
-                <Text style={styles.productName} numberOfLines={2}>
-                  {item.name}
-                </Text>
-                <View style={styles.productCategoryRow}>
-                  <Tag size={12} color={NexoraColors.textMuted} />
-                  <Text style={styles.productCategoryText}>{item.category}</Text>
+            return (
+              <View key={item._id || item.id} style={styles.productCard}>
+                <View style={styles.productTop}>
+                  {/* Product Thumbnail or Fallback Icon Box */}
+                  {primaryImageUrl ? (
+                    <Image
+                      source={{ uri: primaryImageUrl }}
+                      style={styles.productThumbnail}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.productIconBox}>
+                      <Package size={22} color={NexoraColors.primary} />
+                    </View>
+                  )}
+
+                  <View style={styles.productMeta}>
+                    <View style={styles.skuRow}>
+                      <Text style={styles.skuBadge}>SKU: {item.sku || 'NX-SKU'}</Text>
+                      {item.subcategory ? (
+                        <Text style={styles.subcategoryTag}>{item.subcategory}</Text>
+                      ) : null}
+                    </View>
+
+                    <Text style={styles.productName} numberOfLines={2}>
+                      {item.name}
+                    </Text>
+
+                    <View style={styles.productCategoryRow}>
+                      <Tag size={12} color={NexoraColors.textMuted} />
+                      <Text style={styles.productCategoryText}>{catName}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.priceWrap}>
+                    <Text style={styles.productPrice}>${Number(item.price).toFixed(2)}</Text>
+                    {item.compareAtPrice && Number(item.compareAtPrice) > Number(item.price) ? (
+                      <Text style={styles.comparePrice}>${Number(item.compareAtPrice).toFixed(2)}</Text>
+                    ) : null}
+                  </View>
+                </View>
+
+                {/* Stock Stepper & Status Bar */}
+                <View style={styles.productBottom}>
+                  <View style={styles.stepperWrap}>
+                    <Text style={styles.stepperLabel}>Stock:</Text>
+                    <TouchableOpacity
+                      style={[styles.stepperBtn, (item.stock <= 0 || isUpdating) && styles.stepperBtnDisabled]}
+                      onPress={() => handleStockDelta(item, -1)}
+                      disabled={item.stock <= 0 || isUpdating}
+                    >
+                      <Text style={styles.stepperBtnText}>-</Text>
+                    </TouchableOpacity>
+
+                    <View style={styles.stockCountBox}>
+                      {isUpdating ? (
+                        <ActivityIndicator size="small" color={NexoraColors.primary} />
+                      ) : (
+                        <Text style={[styles.stockCountText, isOutOfStock && { color: NexoraColors.statusRejected }]}>
+                          {item.stock}
+                        </Text>
+                      )}
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.stepperBtn, isUpdating && styles.stepperBtnDisabled]}
+                      onPress={() => handleStockDelta(item, 1)}
+                      disabled={isUpdating}
+                    >
+                      <Text style={styles.stepperBtnText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Stock Status Badge */}
+                  <View
+                    style={[
+                      styles.stockStatusBadge,
+                      isOutOfStock
+                        ? { backgroundColor: '#fee2e2' }
+                        : isLowStock
+                        ? { backgroundColor: '#fef3c7' }
+                        : { backgroundColor: '#ecfdf5' },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.stockStatusText,
+                        isOutOfStock
+                          ? { color: '#b91c1c' }
+                          : isLowStock
+                          ? { color: '#b45309' }
+                          : { color: '#047857' },
+                      ]}
+                    >
+                      {isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock'}
+                    </Text>
+                  </View>
+
+                  {/* Delete Button */}
+                  <TouchableOpacity
+                    style={styles.deleteBtn}
+                    onPress={() => handleDeleteProduct(item)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Trash2 size={16} color="#94a3b8" />
+                  </TouchableOpacity>
                 </View>
               </View>
-
-              <Text style={styles.productPrice}>{item.price}</Text>
-            </View>
-
-            <View style={styles.productBottom}>
-              <View style={styles.stockBadge}>
-                <Boxes size={12} color={NexoraColors.textSecondary} />
-                <Text style={styles.stockText}>{item.stock} in stock</Text>
-              </View>
-
-              <View style={styles.commissionTag}>
-                <Text style={styles.commissionText}>Fee: {item.commission}</Text>
-              </View>
-
-              <View
-                style={[
-                  styles.statusTag,
-                  item.status === 'active'
-                    ? { backgroundColor: NexoraColors.statusApprovedBg }
-                    : { backgroundColor: NexoraColors.statusPendingBg },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.statusTagText,
-                    item.status === 'active'
-                      ? { color: NexoraColors.statusApproved }
-                      : { color: NexoraColors.statusPending },
-                  ]}
-                >
-                  {item.status === 'active' ? 'Live in Store' : 'Pending Audit'}
-                </Text>
-              </View>
-            </View>
-          </View>
-        ))}
+            );
+          })
+        )}
       </ScrollView>
 
       {/* Add Product Modal */}
@@ -211,8 +666,17 @@ export default function CatalogScreen() {
         >
           <View style={styles.modalDialog}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>List Physical Product</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
+              <View>
+                <Text style={styles.modalTitle}>List Physical Product</Text>
+                <Text style={styles.modalSubtitle}>Publish new trade supplies or hardware to the store</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setModalVisible(false);
+                  setFormErrors({});
+                  setCatDropdownOpen(false);
+                }}
+              >
                 <X size={20} color={NexoraColors.textSecondary} />
               </TouchableOpacity>
             </View>
@@ -223,45 +687,347 @@ export default function CatalogScreen() {
               automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
               showsVerticalScrollIndicator={false}
             >
+              {/* 1. Featured Cover Image (Required) */}
+              <View style={styles.formGroup}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.inputGroupLabel}>Featured Cover Image</Text>
+                  <Text style={styles.requiredAsterisk}> *</Text>
+                </View>
+                <Text style={styles.fieldHint}>
+                  Primary image displayed to buyers in catalog search and product cards.
+                </Text>
+
+                {formFeaturedImage ? (
+                  <View style={styles.featuredPreviewContainer}>
+                    <Image source={{ uri: formFeaturedImage }} style={styles.featuredPreviewImg} resizeMode="cover" />
+                    <View style={styles.featuredBadgeOverlay}>
+                      <CheckCircle2 size={13} color="#ffffff" />
+                      <Text style={styles.featuredBadgeText}>Featured Cover</Text>
+                    </View>
+                    <View style={styles.featuredActionOverlay}>
+                      <TouchableOpacity
+                        style={styles.featuredChangeBtn}
+                        onPress={handlePickFeaturedImage}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.featuredChangeBtnText}>Change Photo</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.featuredRemoveBtn}
+                        onPress={handleRemoveFeaturedImage}
+                        activeOpacity={0.8}
+                      >
+                        <Trash2 size={14} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[
+                      styles.featuredUploadBox,
+                      Boolean(formErrors.featuredImage) && styles.featuredUploadBoxError,
+                    ]}
+                    onPress={handlePickFeaturedImage}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.featuredIconCircle}>
+                      <Camera size={22} color={formErrors.featuredImage ? '#ef4444' : NexoraColors.primary} />
+                    </View>
+                    <Text
+                      style={[
+                        styles.featuredUploadTitle,
+                        Boolean(formErrors.featuredImage) && styles.featuredUploadTitleError,
+                      ]}
+                    >
+                      Choose Featured Cover Photo *
+                    </Text>
+                    <Text style={styles.featuredUploadSubtitle}>
+                      Required • JPG, PNG or WEBP (1:1 Square recommended)
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {formErrors.featuredImage ? (
+                  <Text style={styles.fieldErrorText}>{formErrors.featuredImage}</Text>
+                ) : null}
+              </View>
+
+              {/* 2. Gallery Images (Optional) */}
+              <View style={styles.formGroup}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.inputGroupLabel}>Gallery Images</Text>
+                  <Text style={styles.optionalTag}> (Optional - Up to 5 additional photos)</Text>
+                </View>
+
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoScroll}>
+                  {formGalleryImages.length < 5 ? (
+                    <TouchableOpacity
+                      style={styles.uploadPhotoBtn}
+                      onPress={handlePickGalleryImage}
+                      activeOpacity={0.8}
+                    >
+                      <Plus size={18} color={NexoraColors.primary} />
+                      <Text style={styles.uploadPhotoText}>Add Photo</Text>
+                    </TouchableOpacity>
+                  ) : null}
+
+                  {formGalleryImages.map((uri, idx) => (
+                    <View key={uri + idx} style={styles.photoPreviewCard}>
+                      <Image source={{ uri }} style={styles.photoPreviewImg} />
+                      <TouchableOpacity
+                        style={styles.removePhotoBtn}
+                        onPress={() => handleRemoveGalleryImage(idx)}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      >
+                        <X size={12} color="#ffffff" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+
+              {/* Product Title (Required) */}
               <NexoraInput
                 label="Product Title"
-                placeholder="e.g. Copper Pipe Fitting Kit (1/2 in)"
-                value={newName}
-                onChangeText={setNewName}
+                required
+                placeholder="e.g. Commercial Grade PEX-A Pipe Coil (100ft)"
+                value={formName}
+                onChangeText={(t) => {
+                  setFormName(t);
+                  if (formErrors.name) setFormErrors((p) => ({ ...p, name: '' }));
+                }}
+                error={formErrors.name}
               />
 
-              <NexoraInput
-                label="Product Category"
-                value={newCategory}
-                onChangeText={setNewCategory}
-                placeholder="Plumbing Fixtures & Supplies"
-              />
+              {/* Autocomplete Category Search Dropdown (Required) */}
+              <View style={styles.formGroup}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.inputGroupLabel}>Store Category</Text>
+                  <Text style={styles.requiredAsterisk}> *</Text>
+                </View>
 
+                {/* Dropdown Toggle Trigger Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.categorySelectBtn,
+                    Boolean(formErrors.category) && styles.categorySelectBtnError,
+                    catDropdownOpen && styles.categorySelectBtnOpen,
+                  ]}
+                  onPress={() => setCatDropdownOpen(!catDropdownOpen)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.categorySelectLeft}>
+                    <Tag size={16} color={selectedCategoryObj ? NexoraColors.primary : NexoraColors.textMuted} />
+                    <Text
+                      style={[
+                        styles.categorySelectText,
+                        !selectedCategoryObj && { color: NexoraColors.textMuted },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {selectedCategoryObj ? selectedCategoryObj.name : 'Select or search store category...'}
+                    </Text>
+                  </View>
+                  <ChevronDown
+                    size={18}
+                    color={NexoraColors.textSecondary}
+                    style={{ transform: [{ rotate: catDropdownOpen ? '180deg' : '0deg' }] }}
+                  />
+                </TouchableOpacity>
+
+                {formErrors.category ? (
+                  <Text style={styles.fieldErrorText}>{formErrors.category}</Text>
+                ) : null}
+
+                {/* Expandable Autocomplete Dropdown List */}
+                {catDropdownOpen ? (
+                  <View style={styles.dropdownCard}>
+                    <View style={styles.dropdownSearchWrap}>
+                      <Search size={15} color={NexoraColors.textMuted} />
+                      <TextInput
+                        style={styles.dropdownSearchInput}
+                        placeholder="Search categories (e.g. Plumbing, Wiring, Tools)..."
+                        placeholderTextColor={NexoraColors.textMuted}
+                        value={catSearchQuery}
+                        onChangeText={setCatSearchQuery}
+                        autoFocus
+                      />
+                      {catSearchQuery ? (
+                        <TouchableOpacity onPress={() => setCatSearchQuery('')}>
+                          <X size={15} color={NexoraColors.textMuted} />
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+
+                    <ScrollView
+                      style={styles.dropdownList}
+                      nestedScrollEnabled
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      {filteredModalCategories.length === 0 ? (
+                        <View style={styles.dropdownEmpty}>
+                          <Text style={styles.dropdownEmptyText}>No matching categories found</Text>
+                        </View>
+                      ) : (
+                        filteredModalCategories.map((c) => {
+                          const isSelected = formCategoryId === c._id;
+                          return (
+                            <TouchableOpacity
+                              key={c._id}
+                              style={[styles.dropdownItem, isSelected && styles.dropdownItemActive]}
+                              onPress={() => {
+                                setFormCategoryId(c._id);
+                                setCatDropdownOpen(false);
+                                setCatSearchQuery('');
+                                if (c.subcategories && c.subcategories.length > 0) {
+                                  setFormSubcategory(c.subcategories[0].name);
+                                } else {
+                                  setFormSubcategory('');
+                                }
+                                if (formErrors.category) {
+                                  setFormErrors((prev) => ({ ...prev, category: '' }));
+                                }
+                              }}
+                            >
+                              <Text
+                                style={[styles.dropdownItemText, isSelected && styles.dropdownItemTextActive]}
+                              >
+                                {c.name}
+                              </Text>
+                              {isSelected ? <Check size={16} color={NexoraColors.primary} /> : null}
+                            </TouchableOpacity>
+                          );
+                        })
+                      )}
+                    </ScrollView>
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Subcategories (if available under chosen category) */}
+              {selectedCategoryObj?.subcategories && selectedCategoryObj.subcategories.length > 0 ? (
+                <View style={styles.formGroup}>
+                  <Text style={styles.inputGroupLabel}>Specialty / Subcategory</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.modalCatScroll}>
+                    {selectedCategoryObj.subcategories.map((sub: any) => {
+                      const isSelected = formSubcategory === sub.name;
+                      return (
+                        <TouchableOpacity
+                          key={sub.name}
+                          style={[styles.modalSubChip, isSelected && styles.modalSubChipActive]}
+                          onPress={() => setFormSubcategory(sub.name)}
+                        >
+                          <Text style={[styles.modalSubChipText, isSelected && styles.modalSubChipTextActive]}>
+                            {sub.name}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              ) : null}
+
+              {/* Price & MSRP (Price is Required) */}
               <View style={styles.modalRow}>
                 <View style={{ flex: 1 }}>
                   <NexoraInput
                     label="Retail Price ($)"
-                    placeholder="49.99"
-                    value={newPrice}
-                    onChangeText={setNewPrice}
-                    keyboardType="numeric"
+                    required
+                    placeholder="89.00"
+                    value={formPrice}
+                    onChangeText={(t) => {
+                      setFormPrice(t);
+                      if (formErrors.price) setFormErrors((p) => ({ ...p, price: '' }));
+                    }}
+                    keyboardType="decimal-pad"
+                    error={formErrors.price}
                   />
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <NexoraInput
-                    label="Stock Quantity"
-                    placeholder="25"
-                    value={newStock}
-                    onChangeText={setNewStock}
-                    keyboardType="numeric"
+                    label="MSRP / Original ($)"
+                    placeholder="105.00"
+                    value={formComparePrice}
+                    onChangeText={setFormComparePrice}
+                    keyboardType="decimal-pad"
                   />
                 </View>
               </View>
 
+              {/* Stock (Required) & Low Stock Alert */}
+              <View style={styles.modalRow}>
+                <View style={{ flex: 1 }}>
+                  <NexoraInput
+                    label="Initial Stock"
+                    required
+                    placeholder="25"
+                    value={formStock}
+                    onChangeText={(t) => {
+                      setFormStock(t);
+                      if (formErrors.stock) setFormErrors((p) => ({ ...p, stock: '' }));
+                    }}
+                    keyboardType="number-pad"
+                    error={formErrors.stock}
+                  />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <NexoraInput
+                    label="Low Stock Alert"
+                    placeholder="5"
+                    value={formLowStock}
+                    onChangeText={setFormLowStock}
+                    keyboardType="number-pad"
+                  />
+                </View>
+              </View>
+
+              <NexoraInput
+                label="Product Details / Specifications"
+                placeholder="Include dimensions, materials, and warranty information..."
+                value={formDescription}
+                onChangeText={setFormDescription}
+                multiline
+                numberOfLines={3}
+              />
+
+              {/* Fulfillment Checkboxes */}
+              <Text style={styles.inputGroupLabel}>Fulfillment Options</Text>
+              <View style={styles.fulfillmentWrap}>
+                <TouchableOpacity
+                  style={[styles.fulfillmentOption, formPickup && styles.fulfillmentOptionActive]}
+                  onPress={() => setFormPickup(!formPickup)}
+                >
+                  <Building2 size={16} color={formPickup ? NexoraColors.primary : NexoraColors.textSecondary} />
+                  <Text style={[styles.fulfillmentText, formPickup && styles.fulfillmentTextActive]}>
+                    Store / Yard Pickup
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.fulfillmentOption, formDelivery && styles.fulfillmentOptionActive]}
+                  onPress={() => setFormDelivery(!formDelivery)}
+                >
+                  <Truck size={16} color={formDelivery ? NexoraColors.primary : NexoraColors.textSecondary} />
+                  <Text style={[styles.fulfillmentText, formDelivery && styles.fulfillmentTextActive]}>
+                    Seller Delivery
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {formDelivery ? (
+                <NexoraInput
+                  label="Local Delivery Fee ($)"
+                  placeholder="15.00"
+                  value={formDeliveryFee}
+                  onChangeText={setFormDeliveryFee}
+                  keyboardType="decimal-pad"
+                />
+              ) : null}
+
               <NexoraButton
-                title="Publish Product to Storefront"
-                onPress={handleAddProduct}
-                style={{ marginTop: 12 }}
+                title={submitting ? 'Publishing SKU...' : 'Publish Product to Storefront'}
+                onPress={handleCreateProduct}
+                loading={submitting}
+                style={{ marginTop: 14 }}
               />
             </ScrollView>
           </View>
@@ -278,8 +1044,7 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: NexoraColors.midnightDark,
-    paddingTop: Platform.OS === 'ios' ? 60 : 44,
-    paddingBottom: 28,
+    paddingBottom: 16,
     paddingHorizontal: 16,
   },
   headerRow: {
@@ -287,6 +1052,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 12,
+    marginBottom: 14,
   },
   headerTextWrap: {
     flex: 1,
@@ -306,23 +1072,63 @@ const styles = StyleSheet.create({
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     backgroundColor: NexoraColors.primary,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.25)',
     flexShrink: 0,
+    ...Shadows.sm,
   },
   addBtnText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
     color: '#ffffff',
   },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: Radius.md,
+    paddingHorizontal: 12,
+    height: 38,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    color: '#ffffff',
+    fontSize: 13,
+  },
+  categoryPillRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  catPill: {
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: Radius.full,
+  },
+  catPillActive: {
+    backgroundColor: '#ffffff',
+  },
+  catPillText: {
+    fontSize: 12,
+    color: '#cbd5e1',
+    fontWeight: '600',
+  },
+  catPillTextActive: {
+    color: NexoraColors.midnightDark,
+    fontWeight: '700',
+  },
   scrollContent: {
     padding: 16,
-    paddingBottom: 36,
   },
   summaryCard: {
     flexDirection: 'row',
@@ -331,38 +1137,83 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: NexoraColors.border,
-    marginBottom: 20,
-    ...Shadows.sm,
+    marginBottom: 18,
+    ...Shadows.card,
   },
   summaryItem: {
     flex: 1,
     alignItems: 'center',
   },
   summaryVal: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
     color: NexoraColors.textPrimary,
   },
   summaryLabel: {
     fontSize: 11,
-    color: NexoraColors.textMuted,
+    color: NexoraColors.textSecondary,
     marginTop: 2,
+    fontWeight: '600',
   },
   summaryDivider: {
     width: 1,
-    height: '80%',
     backgroundColor: NexoraColors.border,
+    height: '80%',
     alignSelf: 'center',
+  },
+  listHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
   },
   listHeading: {
     fontSize: 15,
     fontWeight: '700',
     color: NexoraColors.textPrimary,
-    marginBottom: 12,
+  },
+  emptyBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 50,
+    paddingHorizontal: 20,
+    backgroundColor: '#ffffff',
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: NexoraColors.border,
+    borderStyle: 'dashed',
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: NexoraColors.textPrimary,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  emptySubtext: {
+    fontSize: 12.5,
+    color: NexoraColors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  emptyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: NexoraColors.primary,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: Radius.md,
+  },
+  emptyBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
   },
   productCard: {
     backgroundColor: '#ffffff',
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
     padding: 14,
     borderWidth: 1,
     borderColor: NexoraColors.border,
@@ -372,109 +1223,515 @@ const styles = StyleSheet.create({
   productTop: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    gap: 12,
+  },
+  productThumbnail: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: NexoraColors.border,
+    backgroundColor: '#f1f5f9',
+    flexShrink: 0,
   },
   productIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     backgroundColor: NexoraColors.primaryLight,
+    borderWidth: 1,
+    borderColor: NexoraColors.primaryBorder,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    flexShrink: 0,
   },
   productMeta: {
     flex: 1,
   },
-  productName: {
-    fontSize: 13,
+  skuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 3,
+  },
+  skuBadge: {
+    fontSize: 10,
     fontWeight: '700',
-    color: NexoraColors.textPrimary,
-    lineHeight: 18,
+    color: '#0369a1',
+    backgroundColor: '#e0f2fe',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
-  productCategoryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-  },
-  productCategoryText: {
-    fontSize: 11,
-    color: NexoraColors.textMuted,
-  },
-  productPrice: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: NexoraColors.primary,
-    marginLeft: 8,
-  },
-  productBottom: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-  },
-  stockBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  stockText: {
-    fontSize: 12,
+  subcategoryTag: {
+    fontSize: 10,
+    fontWeight: '600',
     color: NexoraColors.textSecondary,
-    fontWeight: '500',
-  },
-  commissionTag: {
     backgroundColor: '#f1f5f9',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
   },
-  commissionText: {
+  productName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: NexoraColors.textPrimary,
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  productCategoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  productCategoryText: {
+    fontSize: 11,
+    color: NexoraColors.textSecondary,
+    fontWeight: '500',
+  },
+  priceWrap: {
+    alignItems: 'flex-end',
+    flexShrink: 0,
+  },
+  productPrice: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: NexoraColors.primary,
+  },
+  comparePrice: {
     fontSize: 11,
     color: NexoraColors.textMuted,
+    textDecorationLine: 'line-through',
+    marginTop: 1,
   },
-  statusTag: {
+  productBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 12,
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    gap: 8,
+  },
+  stepperWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  stepperLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: NexoraColors.textSecondary,
+  },
+  stepperBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: NexoraColors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperBtnDisabled: {
+    opacity: 0.4,
+  },
+  stepperBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: NexoraColors.textPrimary,
+    lineHeight: 16,
+  },
+  stockCountBox: {
+    minWidth: 28,
+    alignItems: 'center',
+  },
+  stockCountText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: NexoraColors.textPrimary,
+  },
+  stockStatusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 4,
+    borderRadius: Radius.full,
   },
-  statusTagText: {
-    fontSize: 11,
+  stockStatusText: {
+    fontSize: 10.5,
     fontWeight: '700',
+  },
+  deleteBtn: {
+    padding: 6,
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'flex-end',
   },
   modalDialog: {
     backgroundColor: '#ffffff',
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
-    padding: 20,
-    maxHeight: '85%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 12,
+    alignItems: 'flex-start',
+    padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: NexoraColors.border,
   },
   modalTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '800',
     color: NexoraColors.textPrimary,
   },
+  modalSubtitle: {
+    fontSize: 12,
+    color: NexoraColors.textSecondary,
+    marginTop: 2,
+  },
   modalBody: {
-    paddingBottom: 24,
+    padding: 20,
+    paddingBottom: 40,
+  },
+  formGroup: {
+    marginBottom: 16,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  inputGroupLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: NexoraColors.textPrimary,
+  },
+  optionalTag: {
+    fontSize: 12,
+    color: NexoraColors.textMuted,
+  },
+  requiredAsterisk: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: NexoraColors.statusRejected,
+  },
+  photoScroll: {
+    flexDirection: 'row',
+    marginTop: 4,
+  },
+  uploadPhotoBtn: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: NexoraColors.primary,
+    borderStyle: 'dashed',
+    backgroundColor: NexoraColors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+    gap: 4,
+  },
+  uploadPhotoText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: NexoraColors.primary,
+  },
+  photoPreviewCard: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginRight: 10,
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: NexoraColors.border,
+  },
+  photoPreviewImg: {
+    width: '100%',
+    height: '100%',
+  },
+  primaryPhotoBadge: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(8, 78, 138, 0.85)',
+    paddingVertical: 2,
+    alignItems: 'center',
+  },
+  primaryPhotoText: {
+    fontSize: 8.5,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  removePhotoBtn: {
+    position: 'absolute',
+    top: 3,
+    right: 3,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categorySelectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: NexoraColors.border,
+    borderRadius: Radius.md,
+    height: 48,
+    paddingHorizontal: 14,
+  },
+  categorySelectBtnOpen: {
+    borderColor: NexoraColors.primary,
+    borderWidth: 1.5,
+  },
+  categorySelectBtnError: {
+    borderColor: NexoraColors.statusRejected,
+  },
+  categorySelectLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  categorySelectText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: NexoraColors.textPrimary,
+  },
+  dropdownCard: {
+    marginTop: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderColor: NexoraColors.primary,
+    padding: 10,
+    ...Shadows.card,
+  },
+  dropdownSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+    borderRadius: Radius.sm,
+    paddingHorizontal: 10,
+    height: 38,
+    marginBottom: 8,
+  },
+  dropdownSearchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 13,
+    color: NexoraColors.textPrimary,
+  },
+  dropdownList: {
+    maxHeight: 180,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: Radius.sm,
+  },
+  dropdownItemActive: {
+    backgroundColor: NexoraColors.primaryLight,
+  },
+  dropdownItemText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: NexoraColors.textPrimary,
+  },
+  dropdownItemTextActive: {
+    color: NexoraColors.primary,
+    fontWeight: '700',
+  },
+  dropdownEmpty: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  dropdownEmptyText: {
+    fontSize: 12.5,
+    color: NexoraColors.textMuted,
+  },
+  fieldErrorText: {
+    fontSize: 12,
+    color: NexoraColors.statusRejected,
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  modalCatScroll: {
+    flexDirection: 'row',
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  modalSubChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: '#f1f5f9',
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: NexoraColors.border,
+    marginRight: 8,
+  },
+  modalSubChipActive: {
+    backgroundColor: '#e0f2fe',
+    borderColor: '#0284c7',
+  },
+  modalSubChipText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: NexoraColors.textSecondary,
+  },
+  modalSubChipTextActive: {
+    color: '#0369a1',
+    fontWeight: '700',
   },
   modalRow: {
     flexDirection: 'row',
+  },
+  fulfillmentWrap: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  fulfillmentOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderColor: NexoraColors.border,
+    backgroundColor: '#f8fafc',
+  },
+  fulfillmentOptionActive: {
+    borderColor: NexoraColors.primary,
+    backgroundColor: NexoraColors.primaryLight,
+  },
+  fulfillmentText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: NexoraColors.textSecondary,
+  },
+  fulfillmentTextActive: {
+    color: NexoraColors.primary,
+    fontWeight: '700',
+  },
+  fieldHint: {
+    fontSize: 11.5,
+    color: NexoraColors.textMuted,
+    marginBottom: 8,
+    lineHeight: 16,
+  },
+  featuredUploadBox: {
+    borderWidth: 1.5,
+    borderColor: '#bfdbfe',
+    borderStyle: 'dashed',
+    borderRadius: Radius.lg,
+    backgroundColor: '#f8fafc',
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featuredUploadBoxError: {
+    borderColor: '#ef4444',
+    backgroundColor: '#fef2f2',
+  },
+  featuredIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    ...Shadows.sm,
+  },
+  featuredUploadTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: NexoraColors.primaryDark,
+    marginBottom: 3,
+  },
+  featuredUploadTitleError: {
+    color: '#ef4444',
+  },
+  featuredUploadSubtitle: {
+    fontSize: 11,
+    color: NexoraColors.textMuted,
+  },
+  featuredPreviewContainer: {
+    width: '100%',
+    height: 160,
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: NexoraColors.border,
+    backgroundColor: '#0f172a',
+  },
+  featuredPreviewImg: {
+    width: '100%',
+    height: '100%',
+  },
+  featuredBadgeOverlay: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(8, 78, 138, 0.9)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  featuredBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  featuredActionOverlay: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  featuredChangeBtn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    ...Shadows.sm,
+  },
+  featuredChangeBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: NexoraColors.primary,
+  },
+  featuredRemoveBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.sm,
   },
 });

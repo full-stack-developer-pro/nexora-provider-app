@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -28,11 +29,28 @@ import { NexoraColors, Radius, Shadows } from '@/constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { CategoryIcon } from '@/components/common/CategoryIcon';
+import { ProfileSkeleton } from '@/components/common/NexoraShimmer';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { provider, logout } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 450);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 700);
+  }, []);
 
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to log out of your partner account?', [
@@ -58,9 +76,21 @@ export default function ProfileScreen() {
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 20) + 100 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={NexoraColors.primary}
+            colors={[NexoraColors.primary]}
+          />
+        }
       >
-        {/* Profile Card */}
-        <View style={styles.profileCard}>
+        {loading ? (
+          <ProfileSkeleton />
+        ) : (
+          <>
+            {/* Profile Card */}
+            <View style={styles.profileCard}>
           <View style={styles.avatarRow}>
             <View style={styles.avatarBox}>
               <Text style={styles.avatarInitials}>
@@ -212,6 +242,8 @@ export default function ProfileScreen() {
           <LogOut size={18} color={NexoraColors.statusRejected} />
           <Text style={styles.logoutText}>Sign Out from Partner Portal</Text>
         </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
     </View>
   );

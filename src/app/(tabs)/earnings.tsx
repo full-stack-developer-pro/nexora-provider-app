@@ -1,3 +1,4 @@
+import React, { useState, useCallback } from 'react';
 import { NexoraButton } from '@/components/common/NexoraButton';
 import { NexoraColors, Radius, Shadows } from '@/constants/theme';
 import {
@@ -10,12 +11,30 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View
+  View,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { EarningsSkeleton } from '@/components/common/NexoraShimmer';
 
 export default function EarningsScreen() {
   const insets = useSafeAreaInsets();
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 450);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 700);
+  }, []);
   const transactions = [
     {
       id: 'tx_101',
@@ -57,85 +76,101 @@ export default function EarningsScreen() {
         <Text style={styles.subtitle}>Direct deposits, service payouts & marketplace escrow</Text>
       </View>
 
-      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 20) + 80 }]}>
-        {/* Main Balance Card */}
-        <View style={styles.balanceCard}>
-          <View style={styles.balanceHeader}>
-            <Text style={styles.balanceLabel}>Available Balance</Text>
-            <View style={styles.escrowPill}>
-              <Lock size={12} color={NexoraColors.statusApproved} />
-              <Text style={styles.escrowPillText}>Escrow Protected</Text>
-            </View>
-          </View>
-
-          <Text style={styles.balanceAmount}>$1,248.60</Text>
-
-          <View style={styles.balanceStatsRow}>
-            <View>
-              <Text style={styles.statLabel}>Pending Clearance</Text>
-              <Text style={styles.statVal}>$373.50</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View>
-              <Text style={styles.statLabel}>Next Payout Date</Text>
-              <Text style={styles.statVal}>Monday, Nov 2</Text>
-            </View>
-          </View>
-
-          <NexoraButton
-            title="Request Instant Payout (1.5% Fee)"
-            onPress={() => { }}
-            variant="primary"
-            leftIcon={<ArrowUpRight size={18} color="#ffffff" />}
-            style={styles.payoutBtn}
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 20) + 80 }]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={NexoraColors.primary}
+            colors={[NexoraColors.primary]}
           />
-        </View>
-
-        {/* Breakdown Summary */}
-        <View style={styles.breakdownCard}>
-          <Text style={styles.breakdownTitle}>This Month Snapshot</Text>
-          <View style={styles.breakdownRow}>
-            <Text style={styles.breakdownLabel}>Completed Service Dispatches (18)</Text>
-            <Text style={styles.breakdownValue}>$3,420.00</Text>
-          </View>
-          <View style={styles.breakdownRow}>
-            <Text style={styles.breakdownLabel}>Storefront Physical Goods Sales (6)</Text>
-            <Text style={styles.breakdownValue}>$534.00</Text>
-          </View>
-          <View style={styles.breakdownRow}>
-            <Text style={styles.breakdownLabel}>Nexora Platform Fee (10% standard)</Text>
-            <Text style={[styles.breakdownValue, { color: NexoraColors.accent }]}>-$395.40</Text>
-          </View>
-          <View style={styles.breakdownTotalRow}>
-            <Text style={styles.totalLabel}>Net Partner Earnings</Text>
-            <Text style={styles.totalValue}>$3,558.60</Text>
-          </View>
-        </View>
-
-        {/* Recent Transactions */}
-        <Text style={styles.sectionHeading}>Recent Settlements</Text>
-
-        {transactions.map((tx) => (
-          <View key={tx.id} style={styles.txCard}>
-            <View style={styles.txLeft}>
-              <View style={styles.txIconBox}>
-                <CheckCircle2 size={18} color={NexoraColors.statusApproved} />
+        }
+      >
+        {loading ? (
+          <EarningsSkeleton />
+        ) : (
+          <>
+            {/* Main Balance Card */}
+            <View style={styles.balanceCard}>
+              <View style={styles.balanceHeader}>
+                <Text style={styles.balanceLabel}>Available Balance</Text>
+                <View style={styles.escrowPill}>
+                  <Lock size={12} color={NexoraColors.statusApproved} />
+                  <Text style={styles.escrowPillText}>Escrow Protected</Text>
+                </View>
               </View>
-              <View style={styles.txInfo}>
-                <Text style={styles.txTitle} numberOfLines={1} ellipsizeMode="tail">
-                  {tx.title}
-                </Text>
-                <Text style={styles.txMeta} numberOfLines={1}>
-                  {tx.customer} • {tx.date}
-                </Text>
+
+              <Text style={styles.balanceAmount}>$1,248.60</Text>
+
+              <View style={styles.balanceStatsRow}>
+                <View>
+                  <Text style={styles.statLabel}>Pending Clearance</Text>
+                  <Text style={styles.statVal}>$373.50</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View>
+                  <Text style={styles.statLabel}>Next Payout Date</Text>
+                  <Text style={styles.statVal}>Monday, Nov 2</Text>
+                </View>
+              </View>
+
+              <NexoraButton
+                title="Request Instant Payout (1.5% Fee)"
+                onPress={() => { }}
+                variant="primary"
+                leftIcon={<ArrowUpRight size={18} color="#ffffff" />}
+                style={styles.payoutBtn}
+              />
+            </View>
+
+            {/* Breakdown Summary */}
+            <View style={styles.breakdownCard}>
+              <Text style={styles.breakdownTitle}>This Month Snapshot</Text>
+              <View style={styles.breakdownRow}>
+                <Text style={styles.breakdownLabel}>Completed Service Dispatches (18)</Text>
+                <Text style={styles.breakdownValue}>$3,420.00</Text>
+              </View>
+              <View style={styles.breakdownRow}>
+                <Text style={styles.breakdownLabel}>Storefront Physical Goods Sales (6)</Text>
+                <Text style={styles.breakdownValue}>$534.00</Text>
+              </View>
+              <View style={styles.breakdownRow}>
+                <Text style={styles.breakdownLabel}>Nexora Platform Fee (10% standard)</Text>
+                <Text style={[styles.breakdownValue, { color: NexoraColors.accent }]}>-$395.40</Text>
+              </View>
+              <View style={styles.breakdownTotalRow}>
+                <Text style={styles.totalLabel}>Net Partner Earnings</Text>
+                <Text style={styles.totalValue}>$3,558.60</Text>
               </View>
             </View>
-            <View style={styles.txRight}>
-              <Text style={styles.txNet}>{tx.net}</Text>
-              <Text style={styles.txGross}>Gross: {tx.gross}</Text>
-            </View>
-          </View>
-        ))}
+
+            {/* Recent Transactions */}
+            <Text style={styles.sectionHeading}>Recent Settlements</Text>
+
+            {transactions.map((tx) => (
+              <View key={tx.id} style={styles.txCard}>
+                <View style={styles.txLeft}>
+                  <View style={styles.txIconBox}>
+                    <CheckCircle2 size={18} color={NexoraColors.statusApproved} />
+                  </View>
+                  <View style={styles.txInfo}>
+                    <Text style={styles.txTitle} numberOfLines={1} ellipsizeMode="tail">
+                      {tx.title}
+                    </Text>
+                    <Text style={styles.txMeta} numberOfLines={1}>
+                      {tx.customer} • {tx.date}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.txRight}>
+                  <Text style={styles.txNet}>{tx.net}</Text>
+                  <Text style={styles.txGross}>Gross: {tx.gross}</Text>
+                </View>
+              </View>
+            ))}
+          </>
+        )}
       </ScrollView>
     </View>
   );

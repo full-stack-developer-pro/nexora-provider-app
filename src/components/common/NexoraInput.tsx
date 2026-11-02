@@ -13,6 +13,7 @@ import { Eye, EyeOff } from 'lucide-react-native';
 
 interface NexoraInputProps extends TextInputProps {
   label: string;
+  required?: boolean;
   error?: string;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
@@ -23,6 +24,7 @@ interface NexoraInputProps extends TextInputProps {
 
 export const NexoraInput: React.FC<NexoraInputProps> = ({
   label,
+  required = false,
   error,
   leftIcon,
   rightIcon,
@@ -46,7 +48,10 @@ export const NexoraInput: React.FC<NexoraInputProps> = ({
 
   return (
     <View style={[styles.container, containerStyle]} onLayout={onLayout}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.label}>
+        {label}
+        {required && !label.includes('*') ? <Text style={styles.requiredAsterisk}> *</Text> : null}
+      </Text>
 
       <View
         style={[
@@ -97,6 +102,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: NexoraColors.textPrimary,
     marginBottom: 6,
+  },
+  requiredAsterisk: {
+    color: NexoraColors.statusRejected,
+    fontWeight: '700',
   },
   inputWrapper: {
     flexDirection: 'row',

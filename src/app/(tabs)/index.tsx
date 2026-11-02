@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Switch,
   Alert,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import {
   MapPin,
@@ -29,10 +30,12 @@ import { NexoraColors, Radius, Shadows } from '@/constants/theme';
 import { NexoraLogo } from '@/components/common/NexoraLogo';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { CategoryIcon } from '@/components/common/CategoryIcon';
+import { JobCardSkeleton } from '@/components/common/NexoraShimmer';
 
 export default function DispatchesScreen() {
   const insets = useSafeAreaInsets();
   const { provider, isOnline, toggleOnlineStatus } = useAuth();
+  const [loading, setLoading] = useState(true);
 
   const [activeJobs, setActiveJobs] = useState([
     {
@@ -62,6 +65,21 @@ export default function DispatchesScreen() {
   ]);
 
   const [completedToday, setCompletedToday] = useState(1);
+  const [refreshing, setRefreshing] = useState(false);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 450);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 700);
+  }, []);
 
   const handleAcceptJob = (jobId: string) => {
     setActiveJobs((prev) => prev.filter((j) => j.id !== jobId));
@@ -141,6 +159,14 @@ export default function DispatchesScreen() {
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 20) + 95 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={NexoraColors.primary}
+            colors={[NexoraColors.primary]}
+          />
+        }
       >
         {/* KPI Summary Cards */}
         <View style={styles.kpiRow}>
@@ -182,7 +208,12 @@ export default function DispatchesScreen() {
           </Text>
         </View>
 
-        {activeJobs.length === 0 ? (
+        {loading ? (
+          <View>
+            <JobCardSkeleton />
+            <JobCardSkeleton />
+          </View>
+        ) : activeJobs.length === 0 ? (
           <View style={styles.emptyState}>
             <Briefcase size={36} color={NexoraColors.textMuted} />
             <Text style={styles.emptyTitle}>All caught up!</Text>
