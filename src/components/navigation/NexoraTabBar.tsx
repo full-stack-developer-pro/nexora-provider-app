@@ -1,5 +1,6 @@
 import { NexoraColors, Radius } from '@/constants/theme';
 import { useRouter } from 'expo-router';
+import { useAuth } from '@/context/AuthContext';
 import {
   ArrowRight,
   DollarSign,
@@ -11,7 +12,7 @@ import {
   Wrench,
   X
 } from 'lucide-react-native';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Alert,
   Modal,
@@ -37,7 +38,19 @@ export const NexoraTabBar: React.FC<NexoraTabBarProps> = ({
 }) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { provider, refreshStatus } = useAuth();
   const [actionModalVisible, setActionModalVisible] = useState(false);
+
+  // Sync latest capabilities when modal opens to guarantee fresh options
+  useEffect(() => {
+    if (actionModalVisible) {
+      refreshStatus().catch(() => {});
+    }
+  }, [actionModalVisible, refreshStatus]);
+
+  const partnerType = provider?.partnerType || 'both';
+  const canService = partnerType === 'service_provider' || partnerType === 'both';
+  const canProduct = partnerType === 'product_seller' || partnerType === 'both';
 
   // Group tabs into Left 2, Center Button, Right 2
   // state.routes = ['index', 'catalog', 'earnings', 'profile']
@@ -93,7 +106,7 @@ export const NexoraTabBar: React.FC<NexoraTabBarProps> = ({
         case 'index':
           return 'Dispatches';
         case 'catalog':
-          return 'Products';
+          return 'Catalog';
         case 'earnings':
           return 'Earnings';
         case 'profile':
@@ -128,7 +141,12 @@ export const NexoraTabBar: React.FC<NexoraTabBarProps> = ({
   const handleAction = (type: string) => {
     setActionModalVisible(false);
 
-    if (type === 'dispatch') {
+    if (type === 'service') {
+      router.push({
+        pathname: '/(tabs)/catalog',
+        params: { tab: 'services', action: 'new_service' }
+      });
+    } else if (type === 'dispatch') {
       Alert.alert(
         'Create Custom Dispatch',
         'Direct customer dispatch request created. Ready to dispatch nearest verified technician.',
@@ -137,7 +155,7 @@ export const NexoraTabBar: React.FC<NexoraTabBarProps> = ({
     } else if (type === 'product') {
       router.push({
         pathname: '/(tabs)/catalog',
-        params: { action: 'new' }
+        params: { tab: 'products', action: 'new' }
       });
     } else if (type === 'invoice') {
       Alert.alert(
@@ -160,7 +178,7 @@ export const NexoraTabBar: React.FC<NexoraTabBarProps> = ({
           },
         ]}
       >
-        {/* Left Side: Dispatches & Products */}
+        {/* Left Side: Dispatches & Catalog */}
         <View style={styles.halfSide}>
           {leftRoutes.map((route: { key: string; name: string }, i: number) => renderTabItem(route, i))}
         </View>
@@ -208,7 +226,11 @@ export const NexoraTabBar: React.FC<NexoraTabBarProps> = ({
                   <View>
                     <Text style={styles.sheetTitle}>Partner Quick Actions</Text>
                     <Text style={styles.sheetSubtitle}>
-                      Publish offerings, list products or bill clients
+                      {partnerType === 'service_provider'
+                        ? 'Publish trade offerings or bill clients'
+                        : partnerType === 'product_seller'
+                        ? 'List products or bill clients'
+                        : 'Publish offerings, list products or bill clients'}
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -221,41 +243,65 @@ export const NexoraTabBar: React.FC<NexoraTabBarProps> = ({
 
                 {/* Actions Grid */}
                 <View style={styles.actionsList}>
+                  {/* Action 0: Post Service Offering */}
+                  {canService && (
+                    <TouchableOpacity
+                      style={styles.actionCard}
+                      onPress={() => handleAction('service')}
+                      activeOpacity={0.8}
+                    >
+                      <View style={[styles.actionIconBox, { backgroundColor: '#eef5fc' }]}>
+                        <Wrench size={22} color={NexoraColors.primary} />
+                      </View>
+                      <View style={styles.actionMeta}>
+                        <Text style={styles.actionName}>Post New Service Offering</Text>
+                        <Text style={styles.actionDesc}>
+                          Publish trade service, hourly repair, or maintenance offering
+                        </Text>
+                      </View>
+                      <ArrowRight size={18} color="#94a3b8" />
+                    </TouchableOpacity>
+                  )}
+
                   {/* Action 1: Create Dispatch */}
-                  <TouchableOpacity
-                    style={styles.actionCard}
-                    onPress={() => handleAction('dispatch')}
-                    activeOpacity={0.8}
-                  >
-                    <View style={[styles.actionIconBox, { backgroundColor: '#eef5fc' }]}>
-                      <Wrench size={22} color={NexoraColors.primary} />
-                    </View>
-                    <View style={styles.actionMeta}>
-                      <Text style={styles.actionName}>New Custom Dispatch / Quote</Text>
-                      <Text style={styles.actionDesc}>
-                        Schedule on-site trade service or submit price proposal
-                      </Text>
-                    </View>
-                    <ArrowRight size={18} color="#94a3b8" />
-                  </TouchableOpacity>
+                  {canService && (
+                    <TouchableOpacity
+                      style={styles.actionCard}
+                      onPress={() => handleAction('dispatch')}
+                      activeOpacity={0.8}
+                    >
+                      <View style={[styles.actionIconBox, { backgroundColor: '#eef5fc' }]}>
+                        <Wrench size={22} color={NexoraColors.primary} />
+                      </View>
+                      <View style={styles.actionMeta}>
+                        <Text style={styles.actionName}>New Custom Dispatch / Quote</Text>
+                        <Text style={styles.actionDesc}>
+                          Schedule on-site trade service or submit price proposal
+                        </Text>
+                      </View>
+                      <ArrowRight size={18} color="#94a3b8" />
+                    </TouchableOpacity>
+                  )}
 
                   {/* Action 2: Add Product */}
-                  <TouchableOpacity
-                    style={styles.actionCard}
-                    onPress={() => handleAction('product')}
-                    activeOpacity={0.8}
-                  >
-                    <View style={[styles.actionIconBox, { backgroundColor: '#fdf2f8' }]}>
-                      <Package size={22} color="#9d174d" />
-                    </View>
-                    <View style={styles.actionMeta}>
-                      <Text style={styles.actionName}>Add Storefront Product SKU</Text>
-                      <Text style={styles.actionDesc}>
-                        List trade supplies, tools, or spare parts in marketplace
-                      </Text>
-                    </View>
-                    <ArrowRight size={18} color="#94a3b8" />
-                  </TouchableOpacity>
+                  {canProduct && (
+                    <TouchableOpacity
+                      style={styles.actionCard}
+                      onPress={() => handleAction('product')}
+                      activeOpacity={0.8}
+                    >
+                      <View style={[styles.actionIconBox, { backgroundColor: '#fdf2f8' }]}>
+                        <Package size={22} color="#9d174d" />
+                      </View>
+                      <View style={styles.actionMeta}>
+                        <Text style={styles.actionName}>Add Storefront Product SKU</Text>
+                        <Text style={styles.actionDesc}>
+                          List trade supplies, tools, or spare parts in marketplace
+                        </Text>
+                      </View>
+                      <ArrowRight size={18} color="#94a3b8" />
+                    </TouchableOpacity>
+                  )}
 
                   {/* Action 3: Instant Invoice */}
                   <TouchableOpacity

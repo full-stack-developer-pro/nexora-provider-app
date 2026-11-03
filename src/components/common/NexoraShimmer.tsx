@@ -61,36 +61,39 @@ export const NexoraShimmer: React.FC<NexoraShimmerProps> = ({
  */
 export const ProductCardSkeleton: React.FC = () => {
   return (
-    <View style={styles.cardContainer}>
-      <View style={styles.topRow}>
-        <NexoraShimmer width={44} height={44} borderRadius={10} />
-
-        <View style={styles.metaColumn}>
-          <View style={styles.badgeRow}>
-            <NexoraShimmer width={55} height={14} borderRadius={4} />
-            <NexoraShimmer width={70} height={14} borderRadius={4} />
-          </View>
-          <NexoraShimmer width="85%" height={15} borderRadius={4} style={{ marginTop: 6 }} />
-          <NexoraShimmer width="50%" height={12} borderRadius={4} style={{ marginTop: 6 }} />
+    <View style={styles.serviceCardContainer}>
+      {/* 1. Top Row: Category Tag & Delete placeholder */}
+      <View style={styles.serviceTopRow}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+          <NexoraShimmer width={16} height={16} borderRadius={4} />
+          <NexoraShimmer width={100} height={13} borderRadius={4} />
+          <NexoraShimmer width={70} height={13} borderRadius={4} />
         </View>
+        <NexoraShimmer width={26} height={26} borderRadius={6} />
+      </View>
 
-        <View style={styles.priceColumn}>
-          <NexoraShimmer width={50} height={18} borderRadius={4} />
+      {/* 2. Main Row: 74x74 Image + Title + Meta Chips */}
+      <View style={styles.serviceMainRow}>
+        <NexoraShimmer width={74} height={74} borderRadius={10} />
+        <View style={{ flex: 1, gap: 8, justifyContent: 'center' }}>
+          <NexoraShimmer width="92%" height={15} borderRadius={4} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+            <NexoraShimmer width={65} height={18} borderRadius={6} />
+            <NexoraShimmer width={75} height={18} borderRadius={6} />
+            <NexoraShimmer width={70} height={18} borderRadius={6} />
+          </View>
         </View>
       </View>
 
-      <View style={styles.bottomRow}>
-        <View style={styles.stepperRow}>
-          <NexoraShimmer width={45} height={14} borderRadius={4} />
+      {/* 3. Footer Row: Stepper + View Details */}
+      <View style={styles.serviceFooterRow}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <NexoraShimmer width={38} height={14} borderRadius={4} />
           <NexoraShimmer width={26} height={26} borderRadius={6} />
           <NexoraShimmer width={28} height={20} borderRadius={4} />
           <NexoraShimmer width={26} height={26} borderRadius={6} />
         </View>
-
-        <View style={styles.actionsRow}>
-          <NexoraShimmer width={72} height={22} borderRadius={6} />
-          <NexoraShimmer width={26} height={26} borderRadius={6} />
-        </View>
+        <NexoraShimmer width={85} height={16} borderRadius={4} />
       </View>
     </View>
   );
@@ -254,6 +257,45 @@ export const ProfileSkeleton: React.FC = () => {
   );
 };
 
+/**
+ * 5. Pixel-accurate Skeleton Card for Trade Services Offerings (ServiceCatalogSection.tsx)
+ */
+export const ServiceCardSkeleton: React.FC = () => {
+  return (
+    <View style={styles.serviceCardContainer}>
+      {/* 1. Top Row: Category Tag & Delete placeholder */}
+      <View style={styles.serviceTopRow}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+          <NexoraShimmer width={16} height={16} borderRadius={4} />
+          <NexoraShimmer width={110} height={13} borderRadius={4} />
+          <NexoraShimmer width={75} height={13} borderRadius={4} />
+        </View>
+        <NexoraShimmer width={26} height={26} borderRadius={6} />
+      </View>
+
+      {/* 2. Main Row: 74x74 Image + Title + Meta Chips */}
+      <View style={styles.serviceMainRow}>
+        <NexoraShimmer width={74} height={74} borderRadius={10} />
+        <View style={{ flex: 1, gap: 8, justifyContent: 'center' }}>
+          <NexoraShimmer width="92%" height={15} borderRadius={4} />
+          <NexoraShimmer width="60%" height={13} borderRadius={4} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
+            <NexoraShimmer width={68} height={20} borderRadius={6} />
+            <NexoraShimmer width={46} height={20} borderRadius={6} />
+            <NexoraShimmer width={60} height={20} borderRadius={6} />
+          </View>
+        </View>
+      </View>
+
+      {/* 3. Footer Row: Status Badge + View Details Prompt */}
+      <View style={styles.serviceFooterRow}>
+        <NexoraShimmer width={135} height={22} borderRadius={6} />
+        <NexoraShimmer width={85} height={16} borderRadius={4} />
+      </View>
+    </View>
+  );
+};
+
 const styles = StyleSheet.create({
   shimmerBase: {
     backgroundColor: '#cbd5e1',
@@ -301,5 +343,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  serviceCardContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 14,
+    marginBottom: 12,
+    ...Shadows.card,
+  },
+  serviceTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 8,
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  serviceMainRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+  },
+  serviceFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f8fafc',
   },
 });

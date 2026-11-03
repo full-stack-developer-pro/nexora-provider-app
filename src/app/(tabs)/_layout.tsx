@@ -19,7 +19,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="catalog"
         options={{
-          title: 'Products',
+          title: 'Catalog',
         }}
       />
       <Tabs.Screen

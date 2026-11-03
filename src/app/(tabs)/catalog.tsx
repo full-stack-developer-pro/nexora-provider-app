@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import {
+  Wrench,
   Package,
   Plus,
   Tag,
@@ -36,6 +37,7 @@ import {
   Barcode,
   Camera,
   Image as ImageIcon,
+  Minus
 } from 'lucide-react-native';
 import { NexoraColors, Radius, Shadows } from '@/constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -45,16 +47,67 @@ import { NexoraButton } from '@/components/common/NexoraButton';
 import productService, { Product, CreateProductInput } from '@/services/productService';
 import categoryService, { ProductCategory } from '@/services/categoryService';
 import { ProductCardSkeleton } from '@/components/common/NexoraShimmer';
+import { useAuth } from '@/context/AuthContext';
+import { useSystemSettings } from '@/context/SystemSettingsContext';
+import { ServiceCatalogSection } from '@/components/services/ServiceCatalogSection';
+import { ProductDetailsModal } from '@/components/products/ProductDetailsModal';
 
 export default function CatalogScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
+  const { provider } = useAuth();
+  const { settings } = useSystemSettings();
+
+  // Partner Capabilities & Profile-type checks
+  const partnerType = provider?.partnerType || 'both';
+  const isServiceProvider = partnerType === 'service_provider' || partnerType === 'both';
+  const isProductSeller = partnerType === 'product_seller' || partnerType === 'both';
+  const isHybrid = partnerType === 'both';
+
+  const [activeCatalogTab, setActiveCatalogTab] = useState<'services' | 'products'>(() => {
+    if (!isProductSeller) return 'services';
+    if (!isServiceProvider) return 'products';
+    if (params.tab === 'services' || params.action === 'new_service') return 'services';
+    if (params.tab === 'products' || params.action === 'new') return 'products';
+    return 'services';
+  });
+
+  useEffect(() => {
+    if (!isProductSeller) {
+      setActiveCatalogTab('services');
+    } else if (!isServiceProvider) {
+      setActiveCatalogTab('products');
+    } else if (params.tab === 'services' || params.action === 'new_service') {
+      setActiveCatalogTab('services');
+    } else if (params.tab === 'products' || params.action === 'new') {
+      setActiveCatalogTab('products');
+    }
+  }, [params.tab, params.action, isProductSeller, isServiceProvider]);
+
+  const [postServiceTrigger, setPostServiceTrigger] = useState(false);
+
+  // Trade Services States
+  const [serviceCategories, setServiceCategories] = useState<any[]>([]);
+  const [selectedServiceCatId, setSelectedServiceCatId] = useState<string>('all');
+  const [serviceSearchQuery, setServiceSearchQuery] = useState('');
+  const [serviceStats, setServiceStats] = useState({ total: 0, active: 0, inReview: 0, inactive: 0 });
+
+  // Load Service Categories on mount (Only if provider has service capability)
+  useEffect(() => {
+    if (isServiceProvider) {
+      categoryService
+        .getServiceCategories()
+        .then((sc) => setServiceCategories(sc || []))
+        .catch((err) => console.warn('Failed to load service categories:', err?.message));
+    }
+  }, [isServiceProvider]);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stockUpdatingId, setStockUpdatingId] = useState<string | null>(null);
+  const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
 
   // Screen Filters & Debouncing
   const [searchQuery, setSearchQuery] = useState('');
@@ -90,7 +143,7 @@ export default function CatalogScreen() {
   const [formPrice, setFormPrice] = useState('');
   const [formComparePrice, setFormComparePrice] = useState('');
   const [formStock, setFormStock] = useState('20');
-  const [formLowStock, setFormLowStock] = useState('5');
+  const [formLowStock, setFormLowStock] = useState(String(settings.lowStockThreshold || 5));
   const [formFeaturedImage, setFormFeaturedImage] = useState<string | null>(null);
   const [formGalleryImages, setFormGalleryImages] = useState<string[]>([]);
   const [formPickup, setFormPickup] = useState(true);
@@ -110,23 +163,25 @@ export default function CatalogScreen() {
     }
   }, [params.action]);
 
-  // Load Store Categories on mount
+  // Load Store Categories on mount (Only if provider has product seller capability)
   useEffect(() => {
-    categoryService
-      .getProductCategories()
-      .then((cats) => {
-        setCategories(cats || []);
-        setFormCategoryId((prev) => {
-          if (!prev && cats && cats.length > 0) {
-            const sub = cats[0].subcategories?.[0]?.name || '';
-            setFormSubcategory(sub);
-            return cats[0]._id;
-          }
-          return prev;
-        });
-      })
-      .catch((err) => console.warn('Failed to load categories:', err?.message));
-  }, []);
+    if (isProductSeller) {
+      categoryService
+        .getProductCategories()
+        .then((cats) => {
+          setCategories(cats || []);
+          setFormCategoryId((prev) => {
+            if (!prev && cats && cats.length > 0) {
+              const sub = cats[0].subcategories?.[0]?.name || '';
+              setFormSubcategory(sub);
+              return cats[0]._id;
+            }
+            return prev;
+          });
+        })
+        .catch((err) => console.warn('Failed to load categories:', err?.message));
+    }
+  }, [isProductSeller]);
 
   // Fetch Products & Aggregation Stats directly from Server with server-level filters
   const fetchProducts = useCallback(async (search: string, catId: string) => {
@@ -147,12 +202,14 @@ export default function CatalogScreen() {
   }, []);
 
   useEffect(() => {
-    setLoading(true);
-    fetchProducts(debouncedSearch, selectedCategoryId).finally(() => {
-      setLoading(false);
-      setRefreshing(false);
-    });
-  }, [debouncedSearch, selectedCategoryId, fetchProducts]);
+    if (isProductSeller) {
+      setLoading(true);
+      fetchProducts(debouncedSearch, selectedCategoryId).finally(() => {
+        setLoading(false);
+        setRefreshing(false);
+      });
+    }
+  }, [debouncedSearch, selectedCategoryId, fetchProducts, isProductSeller]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -240,6 +297,9 @@ export default function CatalogScreen() {
       setProducts((prev) =>
         prev.map((p) => (p._id === product._id ? { ...p, stock: updated.stock, status: updated.status } : p))
       );
+      setSelectedDetailProduct((prev) =>
+        prev && prev._id === product._id ? { ...prev, stock: updated.stock, status: updated.status } : prev
+      );
       fetchProducts(debouncedSearch, selectedCategoryId);
     } catch (err: any) {
       Alert.alert('Update Failed', err?.response?.data?.message || err?.message || 'Could not update stock.');
@@ -262,6 +322,9 @@ export default function CatalogScreen() {
             try {
               await productService.deleteProduct(product._id);
               setProducts((prev) => prev.filter((p) => p._id !== product._id));
+              if (selectedDetailProduct?._id === product._id) {
+                setSelectedDetailProduct(null);
+              }
               fetchProducts(debouncedSearch, selectedCategoryId);
             } catch (err: any) {
               Alert.alert('Error', err?.response?.data?.message || 'Failed to delete product.');
@@ -360,7 +423,7 @@ export default function CatalogScreen() {
         price: parseFloat(formPrice),
         compareAtPrice: formComparePrice.trim() ? parseFloat(formComparePrice) : null,
         stock: parseInt(formStock, 10) || 0,
-        lowStockThreshold: parseInt(formLowStock, 10) || 5,
+        lowStockThreshold: parseInt(formLowStock, 10) || settings.lowStockThreshold || 5,
         images: imagesPayload,
         fulfillment: {
           pickup: formPickup,
@@ -380,6 +443,7 @@ export default function CatalogScreen() {
       setFormPrice('');
       setFormComparePrice('');
       setFormStock('20');
+      setFormLowStock(String(settings.lowStockThreshold || 5));
       setFormFeaturedImage(null);
       setFormGalleryImages([]);
       setCatDropdownOpen(false);
@@ -413,75 +477,202 @@ export default function CatalogScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: Math.max(insets.top, 24) + 20 }]}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 24) + 16 }]}>
         <View style={styles.headerRow}>
           <View style={styles.headerTextWrap}>
-            <Text style={styles.title}>Physical Goods Storefront</Text>
-            <Text style={styles.subtitle} numberOfLines={2}>
-              Manage inventory, live retail pricing & order fulfillment
+            <Text style={styles.title}>
+              {activeCatalogTab === 'services' ? 'Services & Offerings' : 'Physical Storefront'}
+            </Text>
+            <Text style={styles.subtitle}>
+              {activeCatalogTab === 'services'
+                ? 'Manage trade offerings, hourly rates & service radius'
+                : 'Manage inventory, live retail pricing & order fulfillment'}
             </Text>
           </View>
 
-          <TouchableOpacity
-            style={styles.addBtn}
-            onPress={() => setModalVisible(true)}
-            activeOpacity={0.8}
-          >
-            <Plus size={16} color="#ffffff" strokeWidth={2.5} />
-            <Text style={styles.addBtnText}>Add SKU</Text>
-          </TouchableOpacity>
+          {activeCatalogTab === 'products' ? (
+            <TouchableOpacity
+              style={styles.addBtn}
+              onPress={() => setModalVisible(true)}
+              activeOpacity={0.8}
+            >
+              <Plus size={16} color="#ffffff" strokeWidth={2.5} />
+              <Text style={styles.addBtnText}>Add SKU</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.addBtn}
+              onPress={() => setPostServiceTrigger(true)}
+              activeOpacity={0.8}
+            >
+              <Plus size={16} color="#ffffff" strokeWidth={2.5} />
+              <Text style={styles.addBtnText}>Post Service</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* Search Bar */}
+        {/* Segmented Switcher for Services vs Products (Only for Hybrid Providers) */}
+        {isHybrid && (
+          <View style={styles.segmentContainer}>
+            <TouchableOpacity
+              style={[
+                styles.segmentBtn,
+                activeCatalogTab === 'services' && styles.segmentBtnActive,
+              ]}
+              onPress={() => setActiveCatalogTab('services')}
+              activeOpacity={0.8}
+            >
+              <Wrench
+                size={15}
+                color={activeCatalogTab === 'services' ? '#ffffff' : '#94a3b8'}
+              />
+              <Text
+                style={[
+                  styles.segmentBtnText,
+                  activeCatalogTab === 'services' && styles.segmentBtnTextActive,
+                ]}
+              >
+                Trade Services
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.segmentBtn,
+                activeCatalogTab === 'products' && styles.segmentBtnActive,
+              ]}
+              onPress={() => setActiveCatalogTab('products')}
+              activeOpacity={0.8}
+            >
+              <Package
+                size={15}
+                color={activeCatalogTab === 'products' ? '#ffffff' : '#94a3b8'}
+              />
+              <Text
+                style={[
+                  styles.segmentBtnText,
+                  activeCatalogTab === 'products' && styles.segmentBtnTextActive,
+                ]}
+              >
+                Physical Goods
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Search Bar (Both Tabs) */}
         <View style={styles.searchBar}>
           <Search size={16} color={NexoraColors.textMuted} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search products, SKU or parts..."
-            placeholderTextColor={NexoraColors.textMuted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery ? (
-            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <X size={16} color={NexoraColors.textMuted} />
-            </TouchableOpacity>
-          ) : null}
+          {activeCatalogTab === 'services' ? (
+            <>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search trade services, offerings..."
+                placeholderTextColor={NexoraColors.textMuted}
+                value={serviceSearchQuery}
+                onChangeText={setServiceSearchQuery}
+              />
+              {serviceSearchQuery ? (
+                <TouchableOpacity onPress={() => setServiceSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <X size={16} color={NexoraColors.textMuted} />
+                </TouchableOpacity>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search products, SKU or parts..."
+                placeholderTextColor={NexoraColors.textMuted}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+              {searchQuery ? (
+                <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <X size={16} color={NexoraColors.textMuted} />
+                </TouchableOpacity>
+              ) : null}
+            </>
+          )}
         </View>
 
-        {/* Category Filter Pills (Server-level filter) */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryPillRow}
-        >
-          <TouchableOpacity
-            style={[styles.catPill, selectedCategoryId === 'all' && styles.catPillActive]}
-            onPress={() => setSelectedCategoryId('all')}
+        {/* Category Filter Pills (Both Tabs) */}
+        {activeCatalogTab === 'services' ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryPillRow}
           >
-            <Text style={[styles.catPillText, selectedCategoryId === 'all' && styles.catPillTextActive]}>
-              All ({totalSkus})
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.catPill, selectedServiceCatId === 'all' && styles.catPillActive]}
+              onPress={() => setSelectedServiceCatId('all')}
+            >
+              <Text style={[styles.catPillText, selectedServiceCatId === 'all' && styles.catPillTextActive]}>
+                All ({serviceStats.total})
+              </Text>
+            </TouchableOpacity>
 
-          {categories.map((cat) => {
-            const isSelected = selectedCategoryId === cat._id;
-            return (
-              <TouchableOpacity
-                key={cat._id}
-                style={[styles.catPill, isSelected && styles.catPillActive]}
-                onPress={() => setSelectedCategoryId(cat._id)}
-              >
-                <Text style={[styles.catPillText, isSelected && styles.catPillTextActive]}>
-                  {cat.name}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+            {serviceCategories.map((cat) => {
+              const isSelected = selectedServiceCatId === cat._id;
+              return (
+                <TouchableOpacity
+                  key={cat._id}
+                  style={[styles.catPill, isSelected && styles.catPillActive]}
+                  onPress={() => setSelectedServiceCatId(cat._id)}
+                >
+                  <Text style={[styles.catPillText, isSelected && styles.catPillTextActive]}>
+                    {cat.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryPillRow}
+          >
+            <TouchableOpacity
+              style={[styles.catPill, selectedCategoryId === 'all' && styles.catPillActive]}
+              onPress={() => setSelectedCategoryId('all')}
+            >
+              <Text style={[styles.catPillText, selectedCategoryId === 'all' && styles.catPillTextActive]}>
+                All ({totalSkus})
+              </Text>
+            </TouchableOpacity>
+
+            {categories.map((cat) => {
+              const isSelected = selectedCategoryId === cat._id;
+              return (
+                <TouchableOpacity
+                  key={cat._id}
+                  style={[styles.catPill, isSelected && styles.catPillActive]}
+                  onPress={() => setSelectedCategoryId(cat._id)}
+                >
+                  <Text style={[styles.catPillText, isSelected && styles.catPillTextActive]}>
+                    {cat.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
       </View>
 
-      <ScrollView
+      {/* Render Active Section */}
+      {activeCatalogTab === 'services' ? (
+        <ServiceCatalogSection
+          searchQuery={serviceSearchQuery}
+          selectedCategoryId={selectedServiceCatId}
+          onStatsChange={setServiceStats}
+          initialOpenModal={params.action === 'new_service' || postServiceTrigger}
+          onModalClose={() => setPostServiceTrigger(false)}
+          defaultLocation={provider?.serviceArea}
+        />
+      ) : (
+        <>
+        <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 20) + 95 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={NexoraColors.primary} />}
@@ -535,7 +726,8 @@ export default function CatalogScreen() {
         ) : (
           products.map((item) => {
             const isOutOfStock = (item.stock || 0) <= 0;
-            const isLowStock = !isOutOfStock && (item.stock || 0) <= (item.lowStockThreshold || 5);
+            const threshold = item.lowStockThreshold || settings.lowStockThreshold || 5;
+            const isLowStock = !isOutOfStock && (item.stock || 0) <= threshold;
             const isUpdating = stockUpdatingId === item._id;
             const catName =
               typeof item.category === 'object' && item.category?.name
@@ -546,49 +738,101 @@ export default function CatalogScreen() {
             const primaryImageUrl = item.images && item.images.length > 0 ? item.images[0]?.url : null;
 
             return (
-              <View key={item._id || item.id} style={styles.productCard}>
-                <View style={styles.productTop}>
-                  {/* Product Thumbnail or Fallback Icon Box */}
+              <TouchableOpacity
+                key={item._id || item.id}
+                style={styles.productCardContainer}
+                activeOpacity={0.88}
+                onPress={() => setSelectedDetailProduct(item)}
+              >
+                {/* 1. Card Top Row: Category Tag & Delete Action */}
+                <View style={styles.cardTopRow}>
+                  <View style={styles.tradeTagWrap}>
+                    <Package size={12} color={NexoraColors.primary} />
+                    <Text style={styles.cardCategoryText} numberOfLines={1}>
+                      {catName}
+                    </Text>
+                    {item.subcategory ? (
+                      <>
+                        <Text style={styles.dotSeparator}>&bull;</Text>
+                        <Text style={styles.cardSubcatText} numberOfLines={1}>
+                          {item.subcategory}
+                        </Text>
+                      </>
+                    ) : null}
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={() => handleDeleteProduct(item)}
+                    style={styles.deleteBtnRed}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Trash2 size={15} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* 2. Card Main: 74x74 Thumbnail + Title + Meta Chips */}
+                <View style={styles.cardMainRow}>
                   {primaryImageUrl ? (
-                    <Image
-                      source={{ uri: primaryImageUrl }}
-                      style={styles.productThumbnail}
-                      resizeMode="cover"
-                    />
+                    <Image source={{ uri: primaryImageUrl }} style={styles.cardThumb} resizeMode="cover" />
                   ) : (
-                    <View style={styles.productIconBox}>
-                      <Package size={22} color={NexoraColors.primary} />
+                    <View style={styles.cardThumbFallback}>
+                      <Package size={26} color={NexoraColors.primary} />
                     </View>
                   )}
 
-                  <View style={styles.productMeta}>
-                    <View style={styles.skuRow}>
-                      <Text style={styles.skuBadge}>SKU: {item.sku || 'NX-SKU'}</Text>
-                      {item.subcategory ? (
-                        <Text style={styles.subcategoryTag}>{item.subcategory}</Text>
-                      ) : null}
-                    </View>
-
-                    <Text style={styles.productName} numberOfLines={2}>
+                  <View style={styles.cardInfo}>
+                    <Text style={styles.cardTitle} numberOfLines={2}>
                       {item.name}
                     </Text>
 
-                    <View style={styles.productCategoryRow}>
-                      <Tag size={12} color={NexoraColors.textMuted} />
-                      <Text style={styles.productCategoryText}>{catName}</Text>
-                    </View>
-                  </View>
+                    {/* Meta Chips: Price, SKU, Stock */}
+                    <View style={styles.cardMetaRow}>
+                      <View style={styles.pricePill}>
+                        <Text style={styles.priceVal}>${Number(item.price).toFixed(2)}</Text>
+                        {item.compareAtPrice && Number(item.compareAtPrice) > Number(item.price) ? (
+                          <Text style={styles.comparePriceInline}>
+                            ${Number(item.compareAtPrice).toFixed(2)}
+                          </Text>
+                        ) : null}
+                      </View>
 
-                  <View style={styles.priceWrap}>
-                    <Text style={styles.productPrice}>${Number(item.price).toFixed(2)}</Text>
-                    {item.compareAtPrice && Number(item.compareAtPrice) > Number(item.price) ? (
-                      <Text style={styles.comparePrice}>${Number(item.compareAtPrice).toFixed(2)}</Text>
-                    ) : null}
+                      <View style={styles.metaChip}>
+                        <Tag size={10} color="#64748b" />
+                        <Text style={styles.metaChipText} numberOfLines={1}>
+                          {item.sku || 'NX-SKU'}
+                        </Text>
+                      </View>
+
+                      <View
+                        style={[
+                          styles.metaChip,
+                          isOutOfStock
+                            ? { backgroundColor: '#fee2e2' }
+                            : isLowStock
+                            ? { backgroundColor: '#fef3c7' }
+                            : { backgroundColor: '#ecfdf5' }
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.metaChipText,
+                            isOutOfStock
+                              ? { color: '#b91c1c' }
+                              : isLowStock
+                              ? { color: '#b45309' }
+                              : { color: '#047857' }
+                          ]}
+                        >
+                          {isOutOfStock ? '0 in stock' : `${item.stock} in stock`}
+                        </Text>
+                      </View>
+                    </View>
                   </View>
                 </View>
 
-                {/* Stock Stepper & Status Bar */}
-                <View style={styles.productBottom}>
+                {/* 3. Card Footer: Stock Stepper & View Details Prompt */}
+                <View style={styles.cardFooterRow}>
+                  {/* Stock Stepper */}
                   <View style={styles.stepperWrap}>
                     <Text style={styles.stepperLabel}>Stock:</Text>
                     <TouchableOpacity
@@ -596,7 +840,7 @@ export default function CatalogScreen() {
                       onPress={() => handleStockDelta(item, -1)}
                       disabled={item.stock <= 0 || isUpdating}
                     >
-                      <Text style={styles.stepperBtnText}>-</Text>
+                      <Minus size={13} color={item.stock <= 0 || isUpdating ? '#cbd5e1' : '#0f172a'} />
                     </TouchableOpacity>
 
                     <View style={styles.stockCountBox}>
@@ -614,45 +858,16 @@ export default function CatalogScreen() {
                       onPress={() => handleStockDelta(item, 1)}
                       disabled={isUpdating}
                     >
-                      <Text style={styles.stepperBtnText}>+</Text>
+                      <Plus size={13} color={isUpdating ? '#cbd5e1' : '#0f172a'} />
                     </TouchableOpacity>
                   </View>
 
-                  {/* Stock Status Badge */}
-                  <View
-                    style={[
-                      styles.stockStatusBadge,
-                      isOutOfStock
-                        ? { backgroundColor: '#fee2e2' }
-                        : isLowStock
-                        ? { backgroundColor: '#fef3c7' }
-                        : { backgroundColor: '#ecfdf5' },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.stockStatusText,
-                        isOutOfStock
-                          ? { color: '#b91c1c' }
-                          : isLowStock
-                          ? { color: '#b45309' }
-                          : { color: '#047857' },
-                      ]}
-                    >
-                      {isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock'}
-                    </Text>
+                  <View style={styles.viewDetailsPrompt}>
+                    <Text style={styles.viewDetailsText}>View Details</Text>
+                    <ChevronRight size={13} color={NexoraColors.primary} />
                   </View>
-
-                  {/* Delete Button */}
-                  <TouchableOpacity
-                    style={styles.deleteBtn}
-                    onPress={() => handleDeleteProduct(item)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Trash2 size={16} color="#94a3b8" />
-                  </TouchableOpacity>
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           })
         )}
@@ -972,7 +1187,7 @@ export default function CatalogScreen() {
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <NexoraInput
                     label="Low Stock Alert"
-                    placeholder="5"
+                    placeholder={String(settings.lowStockThreshold || 5)}
                     value={formLowStock}
                     onChangeText={setFormLowStock}
                     keyboardType="number-pad"
@@ -1033,6 +1248,17 @@ export default function CatalogScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+      </>
+      )}
+      {/* Single Product Details Modal */}
+      <ProductDetailsModal
+        visible={Boolean(selectedDetailProduct)}
+        product={selectedDetailProduct}
+        onClose={() => setSelectedDetailProduct(null)}
+        onDelete={handleDeleteProduct}
+        onStockChange={handleStockDelta}
+        isUpdatingStock={Boolean(stockUpdatingId)}
+      />
     </View>
   );
 }
@@ -1068,6 +1294,35 @@ const styles = StyleSheet.create({
     color: '#cbd5e1',
     marginTop: 2,
     lineHeight: 16,
+  },
+  segmentContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: Radius.md,
+    padding: 3,
+    marginBottom: 12,
+  },
+  segmentBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 7,
+    borderRadius: Radius.md - 2,
+  },
+  segmentBtnActive: {
+    backgroundColor: NexoraColors.primary,
+    ...Shadows.sm,
+  },
+  segmentBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#94a3b8',
+  },
+  segmentBtnTextActive: {
+    color: '#ffffff',
+    fontWeight: '800',
   },
   addBtn: {
     flexDirection: 'row',
@@ -1210,6 +1465,140 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '700',
+  },
+  productCardContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 14,
+    marginBottom: 12,
+    ...Shadows.card
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 8,
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9'
+  },
+  tradeTagWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginRight: 8
+  },
+  cardCategoryText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: NexoraColors.primary
+  },
+  dotSeparator: {
+    fontSize: 12,
+    color: '#94a3b8'
+  },
+  cardSubcatText: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '500',
+    flexShrink: 1
+  },
+  deleteBtnRed: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: '#fef2f2',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  cardMainRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center'
+  },
+  cardThumb: {
+    width: 74,
+    height: 74,
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9'
+  },
+  cardThumbFallback: {
+    width: 74,
+    height: 74,
+    borderRadius: 10,
+    backgroundColor: '#eef5fc',
+    borderWidth: 1,
+    borderColor: '#bdd8f2',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  cardInfo: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: 6
+  },
+  cardTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0f172a',
+    lineHeight: 19
+  },
+  cardMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap'
+  },
+  pricePill: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4
+  },
+  priceVal: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0f172a'
+  },
+  comparePriceInline: {
+    fontSize: 12,
+    color: '#94a3b8',
+    textDecorationLine: 'line-through'
+  },
+  metaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6
+  },
+  metaChipText: {
+    fontSize: 11,
+    color: '#475569',
+    fontWeight: '600'
+  },
+  cardFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f8fafc'
+  },
+  viewDetailsPrompt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3
+  },
+  viewDetailsText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: NexoraColors.primary
   },
   productCard: {
     backgroundColor: '#ffffff',

@@ -34,6 +34,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const onlineVal = await AsyncStorage.getItem('nexora_provider_is_online');
           setIsOnline(onlineVal === 'true');
         }
+
+        // Immediately sync fresh profile from server so permissions & partnerType are never stale
+        if (token) {
+          providerAuthService
+            .checkVerificationStatus()
+            .then((fresh) => {
+              if (fresh) {
+                setProvider(fresh);
+              }
+            })
+            .catch((err) => {
+              console.warn('Silent profile sync warning:', err?.message);
+            });
+        }
       } catch (err) {
         console.warn('Failed to load cached provider session:', err);
       } finally {

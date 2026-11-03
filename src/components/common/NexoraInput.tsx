@@ -46,11 +46,14 @@ export const NexoraInput: React.FC<NexoraInputProps> = ({
     inputProps.onBlur?.(e);
   };
 
+  const isRequired = required || label.endsWith('*');
+  const cleanLabel = label.endsWith('*') ? label.slice(0, -1).trimEnd() : label;
+
   return (
     <View style={[styles.container, containerStyle]} onLayout={onLayout}>
       <Text style={styles.label}>
-        {label}
-        {required && !label.includes('*') ? <Text style={styles.requiredAsterisk}> *</Text> : null}
+        {cleanLabel}
+        {isRequired ? <Text style={styles.requiredAsterisk}> *</Text> : null}
       </Text>
 
       <View
