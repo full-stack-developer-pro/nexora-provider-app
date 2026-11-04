@@ -1,13 +1,17 @@
 import { Alert, Platform } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 
-// Complete WebBrowser auth session if returning from OAuth redirect
+// WebBrowser auth completion handler
 WebBrowser.maybeCompleteAuthSession();
 
+// Google OAuth Client IDs from Google Cloud Console
 export const GOOGLE_CONFIG = {
-  clientId:
+  // Web Client ID (used as the audience verification on backend & native SDK)
+  webClientId:
     process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
     '36861188152-ubio4ska6j42gf8l2k7p0530lon6vc79.apps.googleusercontent.com',
+  // Android Native Client ID
+  androidClientId: '36861188152-kvg2eu8kjrkhjs93so17tnp0gdvggmit.apps.googleusercontent.com'
 };
 
 export interface GoogleAuthResult {
@@ -16,33 +20,62 @@ export interface GoogleAuthResult {
   error?: string;
 }
 
+let isConfigured = false;
+
+function setupNativeGoogleSignIn() {
+  if (isConfigured) return true;
+  try {
+    const { GoogleSignin } = require('@react-native-google-signin/google-signin');
+    GoogleSignin.configure({
+      webClientId: GOOGLE_CONFIG.webClientId,
+      offlineAccess: false,
+    });
+    isConfigured = true;
+    return true;
+  } catch (err) {
+    console.warn('Native GoogleSignin not available in current environment:', err);
+    return false;
+  }
+}
+
 /**
- * Initiates the Google OAuth flow on Mobile
+ * Initiates Google Sign-In:
+ * 1. Attempts Native Google Play Services Account Picker popup first (in-app bottom sheet).
+ * 2. Falls back to secure in-app WebBrowser if native Google Play Services is unlinked (e.g. Expo Go).
  */
 export async function promptGoogleAuth(): Promise<GoogleAuthResult> {
-  // If no Google Client ID is configured yet, provide clear developer guidance
-  if (!GOOGLE_CONFIG.clientId) {
-    Alert.alert(
-      'Google Cloud Credentials Needed',
-      'Google Sign-In is ready on the backend and mobile app! To activate live Google sign-in with your real account, add your Google OAuth Client ID to your mobile app .env (EXPO_PUBLIC_GOOGLE_CLIENT_ID).\n\nWould you like guidance on creating your Google Cloud Client ID?',
-      [{ text: 'OK' }]
-    );
-    return {
-      success: false,
-      error: 'GOOGLE_CLIENT_ID_NOT_CONFIGURED'
-    };
+  // 1. Try Native Google Play Services Account Picker (shows bottom-sheet with on-device Gmail IDs)
+  try {
+    const hasNative = setupNativeGoogleSignIn();
+    if (hasNative) {
+      const { GoogleSignin, statusCodes } = require('@react-native-google-signin/google-signin');
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const response = await GoogleSignin.signIn();
+      const idToken = response?.data?.idToken || response?.idToken;
+
+      if (idToken) {
+        return { success: true, idToken };
+      }
+    }
+  } catch (nativeErr: any) {
+    const { statusCodes } = require('@react-native-google-signin/google-signin');
+    if (nativeErr?.code === statusCodes?.SIGN_IN_CANCELLED) {
+      return { success: false, error: 'SIGN_IN_CANCELLED' };
+    }
+    console.warn('Native Google Sign-In fallback to web session:', nativeErr?.message);
   }
 
+  // 2. Fallback: In-app browser auth session
   try {
-    // When clientId is set, use Google Identity OAuth endpoint
     const redirectUri = Platform.select({
-      ios: 'nexora-provider:/oauthredirect',
-      android: 'nexora-provider:/oauthredirect',
+      ios: 'nexoraproviderapp:/oauthredirect',
+      android: 'nexoraproviderapp:/oauthredirect',
       default: typeof window !== 'undefined' ? window.location.origin : ''
     });
 
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-      `client_id=${encodeURIComponent(GOOGLE_CONFIG.clientId)}` +
+    const authUrl =
+      `https://accounts.google.com/o/oauth2/v2/auth?` +
+      `client_id=${encodeURIComponent(GOOGLE_CONFIG.webClientId)}` +
       `&response_type=id_token` +
       `&scope=${encodeURIComponent('openid profile email')}` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
@@ -51,7 +84,6 @@ export async function promptGoogleAuth(): Promise<GoogleAuthResult> {
     const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
 
     if (result.type === 'success' && result.url) {
-      // Parse id_token from URL fragment
       const fragment = result.url.split('#')[1] || result.url.split('?')[1];
       const params = new URLSearchParams(fragment);
       const idToken = params.get('id_token');
@@ -61,10 +93,9 @@ export async function promptGoogleAuth(): Promise<GoogleAuthResult> {
       }
     }
 
-    return { success: false, error: 'User cancelled or failed authentication' };
+    return { success: false, error: 'User cancelled authentication' };
   } catch (err: any) {
     console.error('Google Auth prompt error:', err);
     return { success: false, error: err?.message || 'Google Auth Error' };
   }
 }
-
