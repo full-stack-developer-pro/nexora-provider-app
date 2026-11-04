@@ -22,7 +22,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   Minus,
-  Plus
+  Plus,
+  Pencil
 } from 'lucide-react-native';
 import { NexoraColors, Radius, Shadows } from '@/constants/theme';
 import { StatusBadge } from '@/components/common/StatusBadge';
@@ -34,6 +35,7 @@ interface ProductDetailsModalProps {
   product: Product | null;
   onClose: () => void;
   onDelete?: (product: Product) => void;
+  onEdit?: (product: Product) => void;
   onStockChange?: (product: Product, delta: number) => void;
   isUpdatingStock?: boolean;
 }
@@ -43,6 +45,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
   product,
   onClose,
   onDelete,
+  onEdit,
   onStockChange,
   isUpdatingStock = false
 }) => {
@@ -329,6 +332,20 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
               >
                 <Trash2 size={16} color="#ef4444" />
                 <Text style={styles.deleteButtonText}>Delete SKU</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {onEdit ? (
+              <TouchableOpacity
+                style={styles.editButton}
+                onPress={() => {
+                  onClose();
+                  onEdit(product);
+                }}
+                activeOpacity={0.8}
+              >
+                <Pencil size={15} color={NexoraColors.primary} />
+                <Text style={styles.editButtonText}>Edit SKU</Text>
               </TouchableOpacity>
             ) : null}
 
@@ -711,8 +728,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#ef4444'
   },
+  editButton: {
+    flex: 1,
+    height: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 10,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe'
+  },
+  editButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: NexoraColors.primary
+  },
   closeFullBtn: {
-    flex: 2,
+    flex: 1.5,
     height: 42,
     backgroundColor: NexoraColors.primary,
     borderRadius: 10,

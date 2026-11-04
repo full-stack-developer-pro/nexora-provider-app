@@ -38,6 +38,8 @@ interface PostServiceModalProps {
   visible: boolean;
   onClose: () => void;
   onServiceCreated: (newService: ServiceOffering) => void;
+  onServiceUpdated?: (updated: ServiceOffering) => void;
+  initialService?: ServiceOffering | null;
   defaultLocation?: {
     city?: string;
     state?: string;
@@ -50,6 +52,8 @@ export const PostServiceModal: React.FC<PostServiceModalProps> = ({
   visible,
   onClose,
   onServiceCreated,
+  onServiceUpdated,
+  initialService,
   defaultLocation
 }) => {
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
@@ -66,7 +70,7 @@ export const PostServiceModal: React.FC<PostServiceModalProps> = ({
   const [duration, setDuration] = useState('60'); // in minutes
   const [city, setCity] = useState(defaultLocation?.city || '');
   const [address, setAddress] = useState(defaultLocation?.address || '');
-  const [radiusKm, setRadiusKm] = useState(
+  const [radiusMiles, setRadiusMiles] = useState(
     String(defaultLocation?.radiusMiles || settings.defaultDispatchRadiusMiles || '25')
   );
 
@@ -79,6 +83,52 @@ export const PostServiceModal: React.FC<PostServiceModalProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Prefill or reset form when modal opens
+  useEffect(() => {
+    if (visible && initialService) {
+      setTitle(initialService.title || '');
+      setDescription(initialService.description || '');
+      const catId =
+        typeof initialService.category === 'object'
+          ? initialService.category._id
+          : initialService.category;
+      if (catId) setSelectedCategoryId(catId);
+      setSelectedSubcategory(initialService.subcategory || '');
+      setPricingType(initialService.pricingType || 'fixed');
+      setPrice(initialService.price !== undefined ? String(initialService.price) : '');
+      setDuration(initialService.duration !== undefined ? String(initialService.duration) : '60');
+      setCity(initialService.serviceLocation?.city || defaultLocation?.city || '');
+      setAddress(initialService.serviceLocation?.address || defaultLocation?.address || '');
+      setRadiusMiles(
+        String(
+          initialService.serviceLocation?.serviceRadiusMiles ||
+            initialService.serviceLocation?.serviceRadiusKm ||
+            defaultLocation?.radiusMiles ||
+            settings.defaultDispatchRadiusMiles ||
+            '25'
+        )
+      );
+      setCoverImage(initialService.images?.[0]?.url || null);
+      setGalleryImages(initialService.images?.slice(1).map((i) => i.url) || []);
+      setErrors({});
+    } else if (visible && !initialService) {
+      setTitle('');
+      setDescription('');
+      setSelectedSubcategory('');
+      setPricingType('fixed');
+      setPrice('');
+      setDuration('60');
+      setCity(defaultLocation?.city || '');
+      setAddress(defaultLocation?.address || '');
+      setRadiusMiles(
+        String(defaultLocation?.radiusMiles || settings.defaultDispatchRadiusMiles || '25')
+      );
+      setCoverImage(null);
+      setGalleryImages([]);
+      setErrors({});
+    }
+  }, [visible, initialService, defaultLocation, settings.defaultDispatchRadiusMiles]);
+
   // Load active service categories
   useEffect(() => {
     if (visible) {
@@ -87,7 +137,7 @@ export const PostServiceModal: React.FC<PostServiceModalProps> = ({
         .getServiceCategories()
         .then((cats) => {
           setCategories(cats || []);
-          if (cats && cats.length > 0 && !selectedCategoryId) {
+          if (cats && cats.length > 0 && !selectedCategoryId && !initialService) {
             setSelectedCategoryId(cats[0]._id);
             if (cats[0].subcategories && cats[0].subcategories.length > 0) {
               setSelectedSubcategory(cats[0].subcategories[0].name);
@@ -97,7 +147,7 @@ export const PostServiceModal: React.FC<PostServiceModalProps> = ({
         .catch((err) => console.warn('Could not load service categories:', err))
         .finally(() => setLoadingCategories(false));
     }
-  }, [visible]);
+  }, [visible, initialService]);
 
   // Set default city if provided
   useEffect(() => {
@@ -197,29 +247,44 @@ export const PostServiceModal: React.FC<PostServiceModalProps> = ({
 
     setSubmitting(true);
     try {
-      // 1. Upload Cover Image if present
+      // 1. Cover Image (avoid re-uploading if already on Cloudinary/remote)
       const uploadedImages: Array<{ url: string; publicId?: string; isPrimary: boolean }> = [];
       if (coverImage) {
-        const coverUpload = await providerServiceService.uploadServiceImage(coverImage);
-        uploadedImages.push({
-          url: coverUpload.url,
-          publicId: coverUpload.publicId,
-          isPrimary: true
-        });
+        if (coverImage.startsWith('http')) {
+          uploadedImages.push({
+            url: coverImage,
+            publicId: initialService?.images?.[0]?.publicId || '',
+            isPrimary: true
+          });
+        } else {
+          const coverUpload = await providerServiceService.uploadServiceImage(coverImage);
+          uploadedImages.push({
+            url: coverUpload.url,
+            publicId: coverUpload.publicId,
+            isPrimary: true
+          });
+        }
       }
 
-      // 2. Upload Gallery Images
+      // 2. Gallery Images
       for (const uri of galleryImages) {
-        const galUpload = await providerServiceService.uploadServiceImage(uri);
-        uploadedImages.push({
-          url: galUpload.url,
-          publicId: galUpload.publicId,
-          isPrimary: false
-        });
+        if (uri.startsWith('http')) {
+          uploadedImages.push({
+            url: uri,
+            isPrimary: false
+          });
+        } else {
+          const galUpload = await providerServiceService.uploadServiceImage(uri);
+          uploadedImages.push({
+            url: galUpload.url,
+            publicId: galUpload.publicId,
+            isPrimary: false
+          });
+        }
       }
 
-      // 3. Create Service Offering
-      const created = await providerServiceService.createService({
+      // 3. Create or Update Service Offering
+      const servicePayload = {
         title: title.trim(),
         description: description.trim(),
         category: selectedCategoryId,
@@ -231,15 +296,34 @@ export const PostServiceModal: React.FC<PostServiceModalProps> = ({
         serviceLocation: {
           city: city.trim(),
           address: address.trim(),
-          serviceRadiusKm: Number(radiusKm) || 25
+          serviceRadiusMiles: Number(radiusMiles) || 25,
+          serviceRadiusKm: Number(radiusMiles) || 25
         }
-      });
+      };
 
-      Alert.alert(
-        'Service Published!',
-        'Your service offering is now live in the marketplace catalog and ready for customer bookings.',
-        [{ text: 'Great!', onPress: () => onServiceCreated(created) }]
-      );
+      if (initialService?._id) {
+        const updated = await providerServiceService.updateService(initialService._id, servicePayload);
+        Alert.alert(
+          'Service Updated!',
+          'Your service offering details have been updated successfully.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                if (onServiceUpdated) onServiceUpdated(updated);
+                else onServiceCreated(updated);
+              }
+            }
+          ]
+        );
+      } else {
+        const created = await providerServiceService.createService(servicePayload);
+        Alert.alert(
+          'Service Published!',
+          'Your service offering is now live in the marketplace catalog and ready for customer bookings.',
+          [{ text: 'Great!', onPress: () => onServiceCreated(created) }]
+        );
+      }
 
       // Reset
       resetForm();
@@ -279,8 +363,14 @@ export const PostServiceModal: React.FC<PostServiceModalProps> = ({
                 <Wrench size={20} color={NexoraColors.primary} />
               </View>
               <View>
-                <Text style={styles.modalTitle}>Post New Service Offering</Text>
-                <Text style={styles.modalSubtitle}>Publish your trade services to Nexora clients</Text>
+                <Text style={styles.modalTitle}>
+                  {initialService ? 'Edit Service Offering' : 'Post New Service Offering'}
+                </Text>
+                <Text style={styles.modalSubtitle}>
+                  {initialService
+                    ? 'Update trade offerings, rates & service area'
+                    : 'Publish your trade services to Nexora clients'}
+                </Text>
               </View>
             </View>
             <TouchableOpacity style={styles.closeBtn} onPress={onClose} disabled={submitting}>
@@ -521,21 +611,21 @@ export const PostServiceModal: React.FC<PostServiceModalProps> = ({
               />
 
               <View style={{ marginTop: 10 }}>
-                <Text style={styles.fieldLabel}>Service Radius (Kilometers)</Text>
+                <Text style={styles.fieldLabel}>Service Radius (Miles)</Text>
                 <View style={styles.radiusPillsRow}>
                   {['10', '25', '50', '100'].map((rad) => (
                     <TouchableOpacity
                       key={rad}
-                      style={[styles.radiusPill, radiusKm === rad && styles.radiusPillActive]}
-                      onPress={() => setRadiusKm(rad)}
+                      style={[styles.radiusPill, radiusMiles === rad && styles.radiusPillActive]}
+                      onPress={() => setRadiusMiles(rad)}
                     >
                       <Text
                         style={[
                           styles.radiusPillText,
-                          radiusKm === rad && styles.radiusPillTextActive
+                          radiusMiles === rad && styles.radiusPillTextActive
                         ]}
                       >
-                        {rad} km
+                        {rad} mi
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -632,10 +722,14 @@ export const PostServiceModal: React.FC<PostServiceModalProps> = ({
               {submitting ? (
                 <View style={styles.submittingRow}>
                   <ActivityIndicator size="small" color="#ffffff" />
-                  <Text style={styles.submitBtnText}>Publishing...</Text>
+                  <Text style={styles.submitBtnText}>
+                    {initialService ? 'Saving...' : 'Publishing...'}
+                  </Text>
                 </View>
               ) : (
-                <Text style={styles.submitBtnText}>Publish Service</Text>
+                <Text style={styles.submitBtnText}>
+                  {initialService ? 'Save Changes' : 'Publish Service'}
+                </Text>
               )}
             </TouchableOpacity>
           </View>

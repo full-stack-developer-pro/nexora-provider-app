@@ -37,6 +37,37 @@ export interface ProviderProfile {
   rating?: number;
   completedJobs?: number;
   appliedAt?: string;
+  bio?: string;
+  website?: string;
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+  };
+}
+
+export interface UpdateProfileInput {
+  name?: string;
+  phone?: string;
+  avatar?: string;
+  businessName?: string;
+  bio?: string;
+  website?: string;
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+  };
+  serviceArea?: {
+    city?: string;
+    state?: string;
+    radiusMiles?: number;
+    zipCodes?: string[];
+  };
+  specialties?: string[];
+  experienceYears?: number;
 }
 
 const STORAGE_KEYS = {
@@ -277,6 +308,44 @@ export const providerAuthService = {
       // Keep cached
     }
     return providerAuthService.getCachedProfile();
+  },
+
+  /**
+   * Update provider profile details and cache
+   */
+  updateProfile: async (payload: UpdateProfileInput): Promise<ProviderProfile> => {
+    const res: any = await apiClient.put('/auth/profile', payload);
+    const data = res?.data || res;
+    const user = data?.user;
+    const profile = data?.profile;
+
+    const cached = await providerAuthService.getCachedProfile();
+    const updated: ProviderProfile = {
+      ...(cached || ({} as any)),
+      _id: profile?._id || user?._id || cached?._id || '',
+      name: user?.name || cached?.name || '',
+      email: user?.email || cached?.email || '',
+      phone: user?.phone || cached?.phone || '',
+      businessName: profile?.businessName || user?.businessName || cached?.businessName || user?.name || '',
+      partnerType: profile?.partnerType || cached?.partnerType || 'both',
+      primaryCategory: profile?.providerInfo?.primaryCategory || cached?.primaryCategory || '',
+      specialties: profile?.providerInfo?.specialties || cached?.specialties || [],
+      serviceArea: profile?.providerInfo?.serviceArea || cached?.serviceArea || {
+        city: 'Austin',
+        state: 'TX',
+        radiusMiles: 25,
+      },
+      status: profile?.approvalStatus || cached?.status || 'approved',
+      documents: profile?.documents || cached?.documents || [],
+      experienceYears: profile?.providerInfo?.experienceYears || cached?.experienceYears || 5,
+      licenseNumber: profile?.providerInfo?.licenseNumber || cached?.licenseNumber || '',
+      insurancePolicyNumber: profile?.providerInfo?.insurancePolicyNumber || cached?.insurancePolicyNumber || '',
+      bio: profile?.bio || cached?.bio || '',
+      website: profile?.website || cached?.website || '',
+      address: profile?.address || cached?.address || {},
+    };
+    await AsyncStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(updated));
+    return updated;
   },
 
   /**

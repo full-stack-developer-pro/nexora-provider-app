@@ -132,6 +132,7 @@ export default function CatalogScreen() {
 
   // Modal State
   const [modalVisible, setModalVisible] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Form Fields
@@ -433,30 +434,65 @@ export default function CatalogScreen() {
         },
       };
 
-      const created = await productService.createProduct(payload);
-      fetchProducts(debouncedSearch, selectedCategoryId);
-
-      // Reset form
-      setFormName('');
-      setFormDescription('');
-      setFormSku('');
-      setFormPrice('');
-      setFormComparePrice('');
-      setFormStock('20');
-      setFormLowStock(String(settings.lowStockThreshold || 5));
-      setFormFeaturedImage(null);
-      setFormGalleryImages([]);
-      setCatDropdownOpen(false);
-      setCatSearchQuery('');
-      setModalVisible(false);
-
-      Alert.alert('Product Published', `"${created.name}" is now live in your Nexora storefront!`);
+      if (editingProduct?._id) {
+        const updated = await productService.updateProduct(editingProduct._id, payload);
+        fetchProducts(debouncedSearch, selectedCategoryId);
+        setProducts((prev) => prev.map((p) => (p._id === updated._id ? { ...p, ...updated } : p)));
+        setSelectedDetailProduct((prev) => (prev?._id === updated._id ? { ...prev, ...updated } : prev));
+        resetProductForm();
+        setModalVisible(false);
+        Alert.alert('Product SKU Updated', `"${updated.name}" details have been saved successfully.`);
+      } else {
+        const created = await productService.createProduct(payload);
+        fetchProducts(debouncedSearch, selectedCategoryId);
+        resetProductForm();
+        setModalVisible(false);
+        Alert.alert('Product Published', `"${created.name}" is now live in your Nexora storefront!`);
+      }
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || 'Failed to publish product SKU.';
-      Alert.alert('Error Publishing SKU', msg);
+      const msg = err?.response?.data?.message || err?.message || 'Failed to save product SKU.';
+      Alert.alert('Error Saving SKU', msg);
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const openEditProductModal = (product: Product) => {
+    setEditingProduct(product);
+    setFormName(product.name || '');
+    setFormDescription(product.description || '');
+    setFormSku(product.sku || '');
+    setFormPrice(product.price !== undefined ? String(product.price) : '');
+    setFormComparePrice(product.compareAtPrice ? String(product.compareAtPrice) : '');
+    setFormStock(product.stock !== undefined ? String(product.stock) : '20');
+    setFormLowStock(String(product.lowStockThreshold || settings.lowStockThreshold || 5));
+    const catId = typeof product.category === 'object' ? product.category._id : product.category;
+    setFormCategoryId(catId || '');
+    setFormSubcategory(product.subcategory || '');
+    setFormFeaturedImage(product.images?.[0]?.url || null);
+    setFormGalleryImages(product.images?.slice(1).map((i) => i.url) || []);
+    setFormPickup(product.fulfillment?.pickup ?? true);
+    setFormDelivery(product.fulfillment?.localDelivery ?? false);
+    setFormDeliveryFee(String(product.fulfillment?.deliveryFee || 10));
+    setFormShipping(product.fulfillment?.shipping ?? false);
+    setFormErrors({});
+    setModalVisible(true);
+  };
+
+  const resetProductForm = () => {
+    setFormName('');
+    setFormDescription('');
+    setFormSku('');
+    setFormPrice('');
+    setFormComparePrice('');
+    setFormStock('20');
+    setFormLowStock(String(settings.lowStockThreshold || 5));
+    setFormFeaturedImage(null);
+    setFormGalleryImages([]);
+    setCatDropdownOpen(false);
+    setCatSearchQuery('');
+    setEditingProduct(null);
+    setFormErrors({});
   };
 
   // Filtered categories for autocomplete dropdown in modal
@@ -882,14 +918,19 @@ export default function CatalogScreen() {
           <View style={styles.modalDialog}>
             <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.modalTitle}>List Physical Product</Text>
-                <Text style={styles.modalSubtitle}>Publish new trade supplies or hardware to the store</Text>
+                <Text style={styles.modalTitle}>
+                  {editingProduct ? 'Edit Product SKU' : 'List Physical Product'}
+                </Text>
+                <Text style={styles.modalSubtitle}>
+                  {editingProduct
+                    ? 'Update retail pricing, inventory & fulfillment'
+                    : 'Publish new trade supplies or hardware to the store'}
+                </Text>
               </View>
               <TouchableOpacity
                 onPress={() => {
                   setModalVisible(false);
-                  setFormErrors({});
-                  setCatDropdownOpen(false);
+                  resetProductForm();
                 }}
               >
                 <X size={20} color={NexoraColors.textSecondary} />
@@ -1239,7 +1280,15 @@ export default function CatalogScreen() {
               ) : null}
 
               <NexoraButton
-                title={submitting ? 'Publishing SKU...' : 'Publish Product to Storefront'}
+                title={
+                  submitting
+                    ? editingProduct
+                      ? 'Saving SKU...'
+                      : 'Publishing SKU...'
+                    : editingProduct
+                    ? 'Save Changes'
+                    : 'Publish Product to Storefront'
+                }
                 onPress={handleCreateProduct}
                 loading={submitting}
                 style={{ marginTop: 14 }}
@@ -1256,6 +1305,10 @@ export default function CatalogScreen() {
         product={selectedDetailProduct}
         onClose={() => setSelectedDetailProduct(null)}
         onDelete={handleDeleteProduct}
+        onEdit={(prod) => {
+          setSelectedDetailProduct(null);
+          openEditProductModal(prod);
+        }}
         onStockChange={handleStockDelta}
         isUpdatingStock={Boolean(stockUpdatingId)}
       />

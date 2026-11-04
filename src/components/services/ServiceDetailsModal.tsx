@@ -21,7 +21,8 @@ import {
   Sparkles,
   ShieldCheck,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  Pencil
 } from 'lucide-react-native';
 import { NexoraColors, Radius, Shadows } from '@/constants/theme';
 import { StatusBadge } from '@/components/common/StatusBadge';
@@ -32,13 +33,15 @@ interface ServiceDetailsModalProps {
   service: ServiceOffering | null;
   onClose: () => void;
   onDelete?: (service: ServiceOffering) => void;
+  onEdit?: (service: ServiceOffering) => void;
 }
 
 export const ServiceDetailsModal: React.FC<ServiceDetailsModalProps> = ({
   visible,
   service,
   onClose,
-  onDelete
+  onDelete,
+  onEdit
 }) => {
   if (!service) return null;
 
@@ -190,8 +193,8 @@ export const ServiceDetailsModal: React.FC<ServiceDetailsModalProps> = ({
                 <View style={{ flex: 1 }}>
                   <Text style={styles.locationCityText}>{locationString}</Text>
                   <Text style={styles.locationRadiusText}>
-                    {loc.serviceRadiusKm
-                      ? `Dispatches within ${loc.serviceRadiusKm} km coverage radius`
+                    {loc.serviceRadiusMiles || loc.serviceRadiusKm
+                      ? `Dispatches within ${loc.serviceRadiusMiles || loc.serviceRadiusKm} miles coverage radius`
                       : 'Metro-wide on-site service'}
                   </Text>
                 </View>
@@ -228,6 +231,20 @@ export const ServiceDetailsModal: React.FC<ServiceDetailsModalProps> = ({
               >
                 <Trash2 size={16} color="#ef4444" />
                 <Text style={styles.deleteButtonText}>Delete</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {onEdit ? (
+              <TouchableOpacity
+                style={styles.editButton}
+                onPress={() => {
+                  onClose();
+                  onEdit(service);
+                }}
+                activeOpacity={0.8}
+              >
+                <Pencil size={15} color={NexoraColors.primary} />
+                <Text style={styles.editButtonText}>Edit</Text>
               </TouchableOpacity>
             ) : null}
 
@@ -553,8 +570,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#ef4444'
   },
+  editButton: {
+    flex: 1,
+    height: 42,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6
+  },
+  editButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: NexoraColors.primary
+  },
   closeFullBtn: {
-    flex: 2,
+    flex: 1.5,
     height: 42,
     borderRadius: 10,
     backgroundColor: NexoraColors.primary,

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import providerAuthService, { ProviderProfile } from '../services/providerAuthService';
+import providerAuthService, { ProviderProfile, UpdateProfileInput } from '../services/providerAuthService';
 
 interface AuthContextType {
   provider: ProviderProfile | null;
@@ -11,6 +11,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<ProviderProfile>;
   register: (payload: any) => Promise<ProviderProfile>;
   uploadKYC: (docs: Array<{ type: string; fileName: string; fileUri: string }>) => Promise<void>;
+  updateProfile: (payload: UpdateProfileInput) => Promise<ProviderProfile>;
   refreshStatus: () => Promise<ProviderProfile | null>;
   toggleOnlineStatus: () => Promise<boolean>;
   logout: () => Promise<void>;
@@ -91,6 +92,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateProfile = async (payload: UpdateProfileInput): Promise<ProviderProfile> => {
+    setIsLoading(true);
+    try {
+      const updated = await providerAuthService.updateProfile(payload);
+      setProvider(updated);
+      return updated;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const refreshStatus = async (): Promise<ProviderProfile | null> => {
     const latest = await providerAuthService.checkVerificationStatus();
     if (latest) {
@@ -125,6 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     login,
     register,
     uploadKYC,
+    updateProfile,
     refreshStatus,
     toggleOnlineStatus,
     logout,

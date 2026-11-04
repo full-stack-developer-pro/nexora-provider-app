@@ -56,6 +56,7 @@ export const ServiceCatalogSection: React.FC<ServiceCatalogSectionProps> = ({
 
   // Detail Modal State
   const [selectedDetailService, setSelectedDetailService] = useState<ServiceOffering | null>(null);
+  const [editingService, setEditingService] = useState<ServiceOffering | null>(null);
 
   // Stats
   const [stats, setStats] = useState({
@@ -158,6 +159,11 @@ export const ServiceCatalogSection: React.FC<ServiceCatalogSectionProps> = ({
       active: newService.status === 'active' ? prev.active + 1 : prev.active,
       inReview: newService.status === 'in_review' ? prev.inReview + 1 : prev.inReview
     }));
+  };
+
+  const handleServiceUpdated = (updated: ServiceOffering) => {
+    setServices((prev) => prev.map((s) => (s._id === updated._id ? updated : s)));
+    setSelectedDetailService((prev) => (prev?._id === updated._id ? updated : prev));
   };
 
   return (
@@ -322,14 +328,17 @@ export const ServiceCatalogSection: React.FC<ServiceCatalogSectionProps> = ({
         )}
       </ScrollView>
 
-      {/* Post Service Modal */}
+      {/* Post / Edit Service Modal */}
       <PostServiceModal
         visible={modalVisible}
         onClose={() => {
           setModalVisible(false);
+          setEditingService(null);
           if (onModalClose) onModalClose();
         }}
         onServiceCreated={handleServiceCreated}
+        onServiceUpdated={handleServiceUpdated}
+        initialService={editingService}
         defaultLocation={defaultLocation}
       />
 
@@ -339,6 +348,11 @@ export const ServiceCatalogSection: React.FC<ServiceCatalogSectionProps> = ({
         service={selectedDetailService}
         onClose={() => setSelectedDetailService(null)}
         onDelete={handleDeleteService}
+        onEdit={(service) => {
+          setSelectedDetailService(null);
+          setEditingService(service);
+          setModalVisible(true);
+        }}
       />
     </View>
   );

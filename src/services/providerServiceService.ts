@@ -15,6 +15,7 @@ export interface ServiceLocation {
     lat: number | null;
     lng: number | null;
   };
+  serviceRadiusMiles?: number;
   serviceRadiusKm?: number;
 }
 

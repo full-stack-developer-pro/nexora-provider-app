@@ -22,7 +22,8 @@ import {
   ChevronRight,
   LogOut,
   Building,
-  Star
+  Star,
+  Pencil
 } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { NexoraColors, Radius, Shadows } from '@/constants/theme';
@@ -30,6 +31,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { CategoryIcon } from '@/components/common/CategoryIcon';
 import { ProfileSkeleton } from '@/components/common/NexoraShimmer';
+import { EditProfileModal } from '@/components/profile/EditProfileModal';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -37,6 +39,7 @@ export default function ProfileScreen() {
   const { provider, logout } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -70,7 +73,17 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 24) + 26 }]}>
-        <Text style={styles.headerTitle}>Partner Profile & Credentials</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.headerTitle}>Partner Profile & Credentials</Text>
+          <TouchableOpacity
+            style={styles.editHeaderBtn}
+            onPress={() => setEditModalOpen(true)}
+            activeOpacity={0.8}
+          >
+            <Pencil size={14} color="#ffffff" />
+            <Text style={styles.editHeaderBtnText}>Edit Profile</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -118,6 +131,12 @@ export default function ProfileScreen() {
               </View>
             </View>
           </View>
+
+          {provider?.bio ? (
+            <Text style={styles.bioText} numberOfLines={3}>
+              "{provider.bio}"
+            </Text>
+          ) : null}
 
           {/* Quick Metrics */}
           <View style={styles.metricsStrip}>
@@ -245,6 +264,12 @@ export default function ProfileScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* Edit Profile Modal */}
+      <EditProfileModal
+        visible={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+      />
     </View>
   );
 }
@@ -260,11 +285,34 @@ const styles = StyleSheet.create({
     paddingBottom: 28,
     paddingHorizontal: 16,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
     color: '#ffffff',
     letterSpacing: -0.3,
+    flex: 1,
+  },
+  editHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: Radius.full,
+    marginLeft: 8,
+  },
+  editHeaderBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#ffffff',
   },
   scrollContent: {
     padding: 16,
@@ -283,7 +331,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  bioText: {
+    fontSize: 12.5,
+    color: '#475569',
+    fontStyle: 'italic',
+    lineHeight: 18,
+    marginBottom: 14,
   },
   avatarBox: {
     width: 60,
