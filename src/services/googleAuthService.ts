@@ -5,8 +5,9 @@ import * as WebBrowser from 'expo-web-browser';
 WebBrowser.maybeCompleteAuthSession();
 
 export const GOOGLE_CONFIG = {
-  // Can be populated via .env: EXPO_PUBLIC_GOOGLE_CLIENT_ID
-  clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '',
+  clientId:
+    process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
+    '36861188152-ubio4ska6j42gf8l2k7p0530lon6vc79.apps.googleusercontent.com',
 };
 
 export interface GoogleAuthResult {
@@ -66,3 +67,4 @@ export async function promptGoogleAuth(): Promise<GoogleAuthResult> {
     return { success: false, error: err?.message || 'Google Auth Error' };
   }
 }
+
