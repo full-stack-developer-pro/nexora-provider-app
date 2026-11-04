@@ -9,6 +9,12 @@ interface AuthContextType {
   isOnline: boolean;
   status: 'unauthenticated' | 'pending_approval' | 'approved' | 'rejected' | 'suspended';
   login: (email: string, password: string) => Promise<ProviderProfile>;
+  loginWithGoogle: (
+    idToken: string,
+    role?: 'service_provider' | 'product_seller',
+    partnerType?: 'service_provider' | 'product_seller' | 'both',
+    businessName?: string
+  ) => Promise<ProviderProfile>;
   register: (payload: any) => Promise<ProviderProfile>;
   uploadKYC: (docs: Array<{ type: string; fileName: string; fileUri: string }>) => Promise<void>;
   updateProfile: (payload: UpdateProfileInput) => Promise<ProviderProfile>;
@@ -63,6 +69,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       const res = await providerAuthService.login(email, password);
+      setProvider(res.provider);
+      return res.provider;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loginWithGoogle = async (
+    idToken: string,
+    role?: 'service_provider' | 'product_seller',
+    partnerType?: 'service_provider' | 'product_seller' | 'both',
+    businessName?: string
+  ): Promise<ProviderProfile> => {
+    setIsLoading(true);
+    try {
+      const res = await providerAuthService.loginWithGoogle(idToken, role, partnerType, businessName);
       setProvider(res.provider);
       return res.provider;
     } finally {
@@ -135,6 +157,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isOnline,
     status,
     login,
+    loginWithGoogle,
     register,
     uploadKYC,
     updateProfile,

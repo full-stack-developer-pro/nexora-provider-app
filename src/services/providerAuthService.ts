@@ -145,6 +145,57 @@ export const providerAuthService = {
   },
 
   /**
+   * Google OAuth Sign-in & Sign-up for mobile partner app
+   */
+  loginWithGoogle: async (
+    idToken: string,
+    role: 'service_provider' | 'product_seller' = 'service_provider',
+    partnerType?: 'service_provider' | 'product_seller' | 'both',
+    businessName?: string
+  ): Promise<{ token: string; provider: ProviderProfile }> => {
+    try {
+      const res: any = await apiClient.post('/auth/google', {
+        idToken,
+        role,
+        partnerType: partnerType || role,
+        businessName
+      });
+
+      const token = res?.data?.token || res?.token;
+      const user = res?.data?.user || res?.user;
+
+      if (!token || !user) {
+        throw new Error(res?.message || 'Google sign-in failed. Please try again.');
+      }
+
+      const providerData: ProviderProfile = {
+        _id: user.profileId || user._id,
+        name: user.name,
+        businessName: user.businessName || user.name,
+        partnerType: user.partnerType || (user.role === 'service_provider' ? 'service_provider' : user.role === 'product_seller' ? 'product_seller' : 'both'),
+        email: user.email,
+        phone: user.phone || '',
+        avatar: user.avatar || '',
+        primaryCategory: user.primaryCategory || 'General Trade Services',
+        specialties: user.specialties || [],
+        serviceArea: user.serviceArea || { city: 'Austin', state: 'TX', radiusMiles: 25 },
+        experienceYears: user.experienceYears || 3,
+        documents: user.documents || [],
+        status: user.approvalStatus || user.status || 'approved',
+        rating: 5.0,
+        completedJobs: 0,
+        appliedAt: new Date().toISOString(),
+      };
+
+      await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token);
+      await AsyncStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(providerData));
+      return { token, provider: providerData };
+    } catch (err: any) {
+      throw new Error(err.message || 'Google authentication failed.');
+    }
+  },
+
+  /**
    * Register a new Provider / Seller account
    */
   register: async (payload: {

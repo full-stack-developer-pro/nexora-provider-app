@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,10 +17,15 @@ import { NexoraColors, Radius, Shadows } from '@/constants/theme';
 import { NexoraLogo } from '@/components/common/NexoraLogo';
 import { NexoraInput } from '@/components/common/NexoraInput';
 import { NexoraButton } from '@/components/common/NexoraButton';
+import { GoogleSignInButton } from '@/components/common/GoogleSignInButton';
+import { promptGoogleAuth } from '@/services/googleAuthService';
+import { useAuth } from '@/context/AuthContext';
 
 export default function RegisterScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { loginWithGoogle } = useAuth();
+  const [googleLoading, setGoogleLoading] = useState(false);
   const scrollViewRef = useRef<any>(null);
   const inputPositions = useRef<Record<string, number>>({});
   const sheetY = useRef(0);
@@ -121,6 +127,30 @@ export default function RegisterScreen() {
       router.back();
     } else {
       router.replace('/(auth)/login');
+    }
+  };
+
+  const handleGoogleSignup = async () => {
+    const res = await promptGoogleAuth();
+    if (res.success && res.idToken) {
+      setGoogleLoading(true);
+      try {
+        const prov = await loginWithGoogle(
+          res.idToken,
+          partnerType === 'both' ? 'service_provider' : partnerType,
+          partnerType,
+          businessName.trim() || undefined
+        );
+        if (prov?.status === 'approved') {
+          router.replace('/(tabs)');
+        } else {
+          router.replace('/onboarding/pending');
+        }
+      } catch (err: any) {
+        Alert.alert('Sign Up Error', err.message || 'Google sign up failed.');
+      } finally {
+        setGoogleLoading(false);
+      }
     }
   };
 
@@ -432,6 +462,20 @@ export default function RegisterScreen() {
             style={styles.continueBtn}
           />
 
+          {/* Social Divider */}
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or sign up with</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Google Sign Up */}
+          <GoogleSignInButton
+            title="Sign Up with Google"
+            onPress={handleGoogleSignup}
+            loading={googleLoading}
+          />
+
           <View style={styles.loginPrompt}>
             <Text style={styles.loginPromptText}>Already an approved partner?</Text>
             <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
@@ -587,6 +631,24 @@ const styles = StyleSheet.create({
   },
   continueBtn: {
     marginTop: 10,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 18,
+    gap: 10,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e2e8f0',
+  },
+  dividerText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   loginPrompt: {
     flexDirection: 'row',

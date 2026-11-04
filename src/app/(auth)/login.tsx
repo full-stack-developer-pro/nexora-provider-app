@@ -18,11 +18,14 @@ import { NexoraColors, Radius, Shadows } from '@/constants/theme';
 import { NexoraLogo } from '@/components/common/NexoraLogo';
 import { NexoraInput } from '@/components/common/NexoraInput';
 import { NexoraButton } from '@/components/common/NexoraButton';
+import { GoogleSignInButton } from '@/components/common/GoogleSignInButton';
+import { promptGoogleAuth } from '@/services/googleAuthService';
 
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { login, isLoading } = useAuth();
+  const { login, loginWithGoogle, isLoading } = useAuth();
+  const [googleLoading, setGoogleLoading] = useState(false);
   const scrollViewRef = useRef<any>(null);
   const inputPositions = useRef<Record<string, number>>({});
   const sheetY = useRef(0);
@@ -91,6 +94,26 @@ export default function LoginScreen() {
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Login failed. Please check your credentials.');
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setErrorMessage('');
+    const res = await promptGoogleAuth();
+    if (res.success && res.idToken) {
+      setGoogleLoading(true);
+      try {
+        const prov = await loginWithGoogle(res.idToken, 'service_provider');
+        if (prov?.status === 'approved') {
+          router.replace('/(tabs)');
+        } else {
+          router.replace('/onboarding/pending');
+        }
+      } catch (err: any) {
+        setErrorMessage(err.message || 'Google sign-in failed. Please try again.');
+      } finally {
+        setGoogleLoading(false);
+      }
     }
   };
 
@@ -183,6 +206,20 @@ export default function LoginScreen() {
             loading={isLoading}
             rightIcon={<ArrowRight size={18} color="#ffffff" />}
             style={styles.submitBtn}
+          />
+
+          {/* Social Divider */}
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or continue with</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Google Sign-in */}
+          <GoogleSignInButton
+            onPress={handleGoogleLogin}
+            loading={googleLoading}
+            disabled={isLoading}
           />
 
           {/* Mobile Apply Prompt */}
@@ -344,6 +381,24 @@ const styles = StyleSheet.create({
   },
   submitBtn: {
     marginTop: 4,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 18,
+    gap: 10,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e2e8f0',
+  },
+  dividerText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   registerPrompt: {
     alignItems: 'center',
