@@ -714,691 +714,691 @@ export default function CatalogScreen() {
         />
       ) : (
         <>
-        <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 20) + 95 }]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={NexoraColors.primary} />}
-      >
-        {/* Catalog Summary KPIs (Aggregated across whole database on server) */}
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryVal}>{totalSkus}</Text>
-            <Text style={styles.summaryLabel}>Active SKUs</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryVal}>{totalUnits}</Text>
-            <Text style={styles.summaryLabel}>Units in Stock</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Text style={[styles.summaryVal, lowStockCount > 0 && { color: '#d97706' }]}>
-              {lowStockCount}
-            </Text>
-            <Text style={styles.summaryLabel}>Low Stock</Text>
-          </View>
-        </View>
+          <ScrollView
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 20) + 95 }]}
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={NexoraColors.primary} />}
+          >
+            {/* Catalog Summary KPIs (Aggregated across whole database on server) */}
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryVal}>{totalSkus}</Text>
+                <Text style={styles.summaryLabel}>Active SKUs</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryVal}>{totalUnits}</Text>
+                <Text style={styles.summaryLabel}>Units in Stock</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryVal, lowStockCount > 0 && { color: '#d97706' }]}>
+                  {lowStockCount}
+                </Text>
+                <Text style={styles.summaryLabel}>Low Stock</Text>
+              </View>
+            </View>
 
-        {/* Product Cards List */}
-        <View style={styles.listHeaderRow}>
-          <Text style={styles.listHeading}>Storefront Listings ({products.length})</Text>
-        </View>
+            {/* Product Cards List */}
+            <View style={styles.listHeaderRow}>
+              <Text style={styles.listHeading}>Storefront Listings ({products.length})</Text>
+            </View>
 
-        {loading ? (
-          <View>
-            <ProductCardSkeleton />
-            <ProductCardSkeleton />
-            <ProductCardSkeleton />
-            <ProductCardSkeleton />
-          </View>
-        ) : products.length === 0 ? (
-          <View style={styles.emptyBox}>
-            <Package size={44} color="#94a3b8" />
-            <Text style={styles.emptyTitle}>No Products Found</Text>
-            <Text style={styles.emptySubtext}>
-              {searchQuery || selectedCategoryId !== 'all'
-                ? 'Try adjusting your search or category filters.'
-                : 'Start listing hardware, supplies, and tools to sell in the Nexora marketplace.'}
-            </Text>
-            <TouchableOpacity style={styles.emptyBtn} onPress={() => setModalVisible(true)}>
-              <Plus size={16} color="#ffffff" />
-              <Text style={styles.emptyBtnText}>Add Your First SKU</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          products.map((item) => {
-            const isOutOfStock = (item.stock || 0) <= 0;
-            const threshold = item.lowStockThreshold || settings.lowStockThreshold || 5;
-            const isLowStock = !isOutOfStock && (item.stock || 0) <= threshold;
-            const isUpdating = stockUpdatingId === item._id;
-            const catName =
-              typeof item.category === 'object' && item.category?.name
-                ? item.category.name
-                : categories.find((c) => c._id === (typeof item.category === 'string' ? item.category : item.category?._id))?.name ||
-                  item.categoryName ||
-                  'General Product';
-            const primaryImageUrl = item.images && item.images.length > 0 ? item.images[0]?.url : null;
+            {loading ? (
+              <View>
+                <ProductCardSkeleton />
+                <ProductCardSkeleton />
+                <ProductCardSkeleton />
+                <ProductCardSkeleton />
+              </View>
+            ) : products.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Package size={44} color="#94a3b8" />
+                <Text style={styles.emptyTitle}>No Products Found</Text>
+                <Text style={styles.emptySubtext}>
+                  {searchQuery || selectedCategoryId !== 'all'
+                    ? 'Try adjusting your search or category filters.'
+                    : 'Start listing hardware, supplies, and tools to sell in the Nexora marketplace.'}
+                </Text>
+                <TouchableOpacity style={styles.emptyBtn} onPress={() => setModalVisible(true)}>
+                  <Plus size={16} color="#ffffff" />
+                  <Text style={styles.emptyBtnText}>Add Your First SKU</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              products.map((item) => {
+                const isOutOfStock = (item.stock || 0) <= 0;
+                const threshold = item.lowStockThreshold || settings.lowStockThreshold || 5;
+                const isLowStock = !isOutOfStock && (item.stock || 0) <= threshold;
+                const isUpdating = stockUpdatingId === item._id;
+                const catName =
+                  typeof item.category === 'object' && item.category?.name
+                    ? item.category.name
+                    : categories.find((c) => c._id === (typeof item.category === 'string' ? item.category : item.category?._id))?.name ||
+                    item.categoryName ||
+                    'General Product';
+                const primaryImageUrl = item.images && item.images.length > 0 ? item.images[0]?.url : null;
 
-            return (
-              <TouchableOpacity
-                key={item._id || item.id}
-                style={styles.productCardContainer}
-                activeOpacity={0.88}
-                onPress={() => setSelectedDetailProduct(item)}
-              >
-                {/* 1. Card Top Row: Category Tag & Delete Action */}
-                <View style={styles.cardTopRow}>
-                  <View style={styles.tradeTagWrap}>
-                    <Package size={12} color={NexoraColors.primary} />
-                    <Text style={styles.cardCategoryText} numberOfLines={1}>
-                      {catName}
-                    </Text>
-                    {item.subcategory ? (
-                      <>
-                        <Text style={styles.dotSeparator}>&bull;</Text>
-                        <Text style={styles.cardSubcatText} numberOfLines={1}>
-                          {item.subcategory}
-                        </Text>
-                      </>
-                    ) : null}
-                  </View>
-
+                return (
                   <TouchableOpacity
-                    onPress={() => handleDeleteProduct(item)}
-                    style={styles.deleteBtnRed}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    key={item._id || item.id}
+                    style={styles.productCardContainer}
+                    activeOpacity={0.88}
+                    onPress={() => setSelectedDetailProduct(item)}
                   >
-                    <Trash2 size={15} color="#ef4444" />
-                  </TouchableOpacity>
-                </View>
-
-                {/* 2. Card Main: 74x74 Thumbnail + Title + Meta Chips */}
-                <View style={styles.cardMainRow}>
-                  {primaryImageUrl ? (
-                    <Image source={{ uri: primaryImageUrl }} style={styles.cardThumb} resizeMode="cover" />
-                  ) : (
-                    <View style={styles.cardThumbFallback}>
-                      <Package size={26} color={NexoraColors.primary} />
-                    </View>
-                  )}
-
-                  <View style={styles.cardInfo}>
-                    <Text style={styles.cardTitle} numberOfLines={2}>
-                      {item.name}
-                    </Text>
-
-                    {/* Meta Chips: Price, SKU, Stock */}
-                    <View style={styles.cardMetaRow}>
-                      <View style={styles.pricePill}>
-                        <Text style={styles.priceVal}>${Number(item.price).toFixed(2)}</Text>
-                        {item.compareAtPrice && Number(item.compareAtPrice) > Number(item.price) ? (
-                          <Text style={styles.comparePriceInline}>
-                            ${Number(item.compareAtPrice).toFixed(2)}
-                          </Text>
+                    {/* 1. Card Top Row: Category Tag & Delete Action */}
+                    <View style={styles.cardTopRow}>
+                      <View style={styles.tradeTagWrap}>
+                        <Package size={12} color={NexoraColors.primary} />
+                        <Text style={styles.cardCategoryText} numberOfLines={1}>
+                          {catName}
+                        </Text>
+                        {item.subcategory ? (
+                          <>
+                            <Text style={styles.dotSeparator}>&bull;</Text>
+                            <Text style={styles.cardSubcatText} numberOfLines={1}>
+                              {item.subcategory}
+                            </Text>
+                          </>
                         ) : null}
                       </View>
 
-                      <View style={styles.metaChip}>
-                        <Tag size={10} color="#64748b" />
-                        <Text style={styles.metaChipText} numberOfLines={1}>
-                          {item.sku || 'NX-SKU'}
-                        </Text>
-                      </View>
-
-                      {/* Condition Chip */}
-                      <View
-                        style={[
-                          styles.metaChip,
-                          item.condition === 'refurbished'
-                            ? { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }
-                            : item.condition === 'old'
-                            ? { backgroundColor: '#fef3c7', borderColor: '#fde68a' }
-                            : { backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' }
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.metaChipText,
-                            item.condition === 'refurbished'
-                              ? { color: '#1d4ed8' }
-                              : item.condition === 'old'
-                              ? { color: '#b45309' }
-                              : { color: '#047857' }
-                          ]}
-                        >
-                          {item.condition === 'refurbished'
-                            ? 'Refurbished'
-                            : item.condition === 'old'
-                            ? 'Used'
-                            : 'New'}
-                        </Text>
-                      </View>
-
-                      <View
-                        style={[
-                          styles.metaChip,
-                          isOutOfStock
-                            ? { backgroundColor: '#fee2e2' }
-                            : isLowStock
-                            ? { backgroundColor: '#fef3c7' }
-                            : { backgroundColor: '#ecfdf5' }
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.metaChipText,
-                            isOutOfStock
-                              ? { color: '#b91c1c' }
-                              : isLowStock
-                              ? { color: '#b45309' }
-                              : { color: '#047857' }
-                          ]}
-                        >
-                          {isOutOfStock ? '0 in stock' : `${item.stock} in stock`}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-
-                {/* 3. Card Footer: Stock Stepper & View Details Prompt */}
-                <View style={styles.cardFooterRow}>
-                  {/* Stock Stepper */}
-                  <View style={styles.stepperWrap}>
-                    <Text style={styles.stepperLabel}>Stock:</Text>
-                    <TouchableOpacity
-                      style={[styles.stepperBtn, (item.stock <= 0 || isUpdating) && styles.stepperBtnDisabled]}
-                      onPress={() => handleStockDelta(item, -1)}
-                      disabled={item.stock <= 0 || isUpdating}
-                    >
-                      <Minus size={13} color={item.stock <= 0 || isUpdating ? '#cbd5e1' : '#0f172a'} />
-                    </TouchableOpacity>
-
-                    <View style={styles.stockCountBox}>
-                      {isUpdating ? (
-                        <ActivityIndicator size="small" color={NexoraColors.primary} />
-                      ) : (
-                        <Text style={[styles.stockCountText, isOutOfStock && { color: NexoraColors.statusRejected }]}>
-                          {item.stock}
-                        </Text>
-                      )}
-                    </View>
-
-                    <TouchableOpacity
-                      style={[styles.stepperBtn, isUpdating && styles.stepperBtnDisabled]}
-                      onPress={() => handleStockDelta(item, 1)}
-                      disabled={isUpdating}
-                    >
-                      <Plus size={13} color={isUpdating ? '#cbd5e1' : '#0f172a'} />
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.viewDetailsPrompt}>
-                    <Text style={styles.viewDetailsText}>View Details</Text>
-                    <ChevronRight size={13} color={NexoraColors.primary} />
-                  </View>
-                </View>
-              </TouchableOpacity>
-            );
-          })
-        )}
-      </ScrollView>
-
-      {/* Add Product Modal */}
-      <Modal visible={modalVisible} animationType="slide" transparent>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalBackdrop}
-        >
-          <View style={styles.modalDialog}>
-            <View style={styles.modalHeader}>
-              <View>
-                <Text style={styles.modalTitle}>
-                  {editingProduct ? 'Edit Product SKU' : 'List Physical Product'}
-                </Text>
-                <Text style={styles.modalSubtitle}>
-                  {editingProduct
-                    ? 'Update retail pricing, inventory & fulfillment'
-                    : 'Publish new trade supplies or hardware to the store'}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => {
-                  setModalVisible(false);
-                  resetProductForm();
-                }}
-              >
-                <X size={20} color={NexoraColors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              contentContainerStyle={styles.modalBody}
-              keyboardShouldPersistTaps="handled"
-              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-              showsVerticalScrollIndicator={false}
-            >
-              {/* 1. Featured Cover Image (Required) */}
-              <View style={styles.formGroup}>
-                <View style={styles.labelRow}>
-                  <Text style={styles.inputGroupLabel}>Featured Cover Image</Text>
-                  <Text style={styles.requiredAsterisk}> *</Text>
-                </View>
-                <Text style={styles.fieldHint}>
-                  Primary image displayed to buyers in catalog search and product cards.
-                </Text>
-
-                {formFeaturedImage ? (
-                  <View style={styles.featuredPreviewContainer}>
-                    <Image source={{ uri: formFeaturedImage }} style={styles.featuredPreviewImg} resizeMode="cover" />
-                    <View style={styles.featuredBadgeOverlay}>
-                      <CheckCircle2 size={13} color="#ffffff" />
-                      <Text style={styles.featuredBadgeText}>Featured Cover</Text>
-                    </View>
-                    <View style={styles.featuredActionOverlay}>
                       <TouchableOpacity
-                        style={styles.featuredChangeBtn}
+                        onPress={() => handleDeleteProduct(item)}
+                        style={styles.deleteBtnRed}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Trash2 size={15} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* 2. Card Main: 74x74 Thumbnail + Title + Meta Chips */}
+                    <View style={styles.cardMainRow}>
+                      {primaryImageUrl ? (
+                        <Image source={{ uri: primaryImageUrl }} style={styles.cardThumb} resizeMode="cover" />
+                      ) : (
+                        <View style={styles.cardThumbFallback}>
+                          <Package size={26} color={NexoraColors.primary} />
+                        </View>
+                      )}
+
+                      <View style={styles.cardInfo}>
+                        <Text style={styles.cardTitle} numberOfLines={2}>
+                          {item.name}
+                        </Text>
+
+                        {/* Meta Chips: Price, SKU, Stock */}
+                        <View style={styles.cardMetaRow}>
+                          <View style={styles.pricePill}>
+                            <Text style={styles.priceVal}>${Number(item.price).toFixed(2)}</Text>
+                            {item.compareAtPrice && Number(item.compareAtPrice) > Number(item.price) ? (
+                              <Text style={styles.comparePriceInline}>
+                                ${Number(item.compareAtPrice).toFixed(2)}
+                              </Text>
+                            ) : null}
+                          </View>
+
+                          <View style={styles.metaChip}>
+                            <Tag size={10} color="#64748b" />
+                            <Text style={styles.metaChipText} numberOfLines={1}>
+                              {item.sku || 'NX-SKU'}
+                            </Text>
+                          </View>
+
+                          {/* Condition Chip */}
+                          <View
+                            style={[
+                              styles.metaChip,
+                              item.condition === 'refurbished'
+                                ? { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }
+                                : item.condition === 'old'
+                                  ? { backgroundColor: '#fef3c7', borderColor: '#fde68a' }
+                                  : { backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' }
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.metaChipText,
+                                item.condition === 'refurbished'
+                                  ? { color: '#1d4ed8' }
+                                  : item.condition === 'old'
+                                    ? { color: '#b45309' }
+                                    : { color: '#047857' }
+                              ]}
+                            >
+                              {item.condition === 'refurbished'
+                                ? 'Refurbished'
+                                : item.condition === 'old'
+                                  ? 'Used'
+                                  : 'New'}
+                            </Text>
+                          </View>
+
+                          <View
+                            style={[
+                              styles.metaChip,
+                              isOutOfStock
+                                ? { backgroundColor: '#fee2e2' }
+                                : isLowStock
+                                  ? { backgroundColor: '#fef3c7' }
+                                  : { backgroundColor: '#ecfdf5' }
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.metaChipText,
+                                isOutOfStock
+                                  ? { color: '#b91c1c' }
+                                  : isLowStock
+                                    ? { color: '#b45309' }
+                                    : { color: '#047857' }
+                              ]}
+                            >
+                              {isOutOfStock ? '0 in stock' : `${item.stock} in stock`}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* 3. Card Footer: Stock Stepper & View Details Prompt */}
+                    <View style={styles.cardFooterRow}>
+                      {/* Stock Stepper */}
+                      <View style={styles.stepperWrap}>
+                        <Text style={styles.stepperLabel}>Stock:</Text>
+                        <TouchableOpacity
+                          style={[styles.stepperBtn, (item.stock <= 0 || isUpdating) && styles.stepperBtnDisabled]}
+                          onPress={() => handleStockDelta(item, -1)}
+                          disabled={item.stock <= 0 || isUpdating}
+                        >
+                          <Minus size={13} color={item.stock <= 0 || isUpdating ? '#cbd5e1' : '#0f172a'} />
+                        </TouchableOpacity>
+
+                        <View style={styles.stockCountBox}>
+                          {isUpdating ? (
+                            <ActivityIndicator size="small" color={NexoraColors.primary} />
+                          ) : (
+                            <Text style={[styles.stockCountText, isOutOfStock && { color: NexoraColors.statusRejected }]}>
+                              {item.stock}
+                            </Text>
+                          )}
+                        </View>
+
+                        <TouchableOpacity
+                          style={[styles.stepperBtn, isUpdating && styles.stepperBtnDisabled]}
+                          onPress={() => handleStockDelta(item, 1)}
+                          disabled={isUpdating}
+                        >
+                          <Plus size={13} color={isUpdating ? '#cbd5e1' : '#0f172a'} />
+                        </TouchableOpacity>
+                      </View>
+
+                      <View style={styles.viewDetailsPrompt}>
+                        <Text style={styles.viewDetailsText}>View Details</Text>
+                        <ChevronRight size={13} color={NexoraColors.primary} />
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </ScrollView>
+
+          {/* Add Product Modal */}
+          <Modal visible={modalVisible} animationType="slide" transparent>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={styles.modalBackdrop}
+            >
+              <View style={styles.modalDialog}>
+                <View style={styles.modalHeader}>
+                  <View>
+                    <Text style={styles.modalTitle}>
+                      {editingProduct ? 'Edit Product SKU' : 'List Physical Product'}
+                    </Text>
+                    <Text style={styles.modalSubtitle}>
+                      {editingProduct
+                        ? 'Update retail pricing, inventory & fulfillment'
+                        : 'Publish new trade supplies or hardware to the store'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setModalVisible(false);
+                      resetProductForm();
+                    }}
+                  >
+                    <X size={20} color={NexoraColors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView
+                  contentContainerStyle={styles.modalBody}
+                  keyboardShouldPersistTaps="handled"
+                  automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {/* 1. Featured Cover Image (Required) */}
+                  <View style={styles.formGroup}>
+                    <View style={styles.labelRow}>
+                      <Text style={styles.inputGroupLabel}>Featured Cover Image</Text>
+                      <Text style={styles.requiredAsterisk}> *</Text>
+                    </View>
+                    <Text style={styles.fieldHint}>
+                      Primary image displayed to buyers in catalog search and product cards.
+                    </Text>
+
+                    {formFeaturedImage ? (
+                      <View style={styles.featuredPreviewContainer}>
+                        <Image source={{ uri: formFeaturedImage }} style={styles.featuredPreviewImg} resizeMode="cover" />
+                        <View style={styles.featuredBadgeOverlay}>
+                          <CheckCircle2 size={13} color="#ffffff" />
+                          <Text style={styles.featuredBadgeText}>Featured Cover</Text>
+                        </View>
+                        <View style={styles.featuredActionOverlay}>
+                          <TouchableOpacity
+                            style={styles.featuredChangeBtn}
+                            onPress={handlePickFeaturedImage}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={styles.featuredChangeBtnText}>Change Photo</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.featuredRemoveBtn}
+                            onPress={handleRemoveFeaturedImage}
+                            activeOpacity={0.8}
+                          >
+                            <Trash2 size={14} color="#ef4444" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={[
+                          styles.featuredUploadBox,
+                          Boolean(formErrors.featuredImage) && styles.featuredUploadBoxError,
+                        ]}
                         onPress={handlePickFeaturedImage}
                         activeOpacity={0.8}
                       >
-                        <Text style={styles.featuredChangeBtnText}>Change Photo</Text>
+                        <View style={styles.featuredIconCircle}>
+                          <Camera size={22} color={formErrors.featuredImage ? '#ef4444' : NexoraColors.primary} />
+                        </View>
+                        <Text
+                          style={[
+                            styles.featuredUploadTitle,
+                            Boolean(formErrors.featuredImage) && styles.featuredUploadTitleError,
+                          ]}
+                        >
+                          Choose Featured Cover Photo *
+                        </Text>
+                        <Text style={styles.featuredUploadSubtitle}>
+                          Required • JPG, PNG or WEBP (1:1 Square recommended)
+                        </Text>
                       </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.featuredRemoveBtn}
-                        onPress={handleRemoveFeaturedImage}
-                        activeOpacity={0.8}
-                      >
-                        <Trash2 size={14} color="#ef4444" />
-                      </TouchableOpacity>
-                    </View>
+                    )}
+                    {formErrors.featuredImage ? (
+                      <Text style={styles.fieldErrorText}>{formErrors.featuredImage}</Text>
+                    ) : null}
                   </View>
-                ) : (
-                  <TouchableOpacity
-                    style={[
-                      styles.featuredUploadBox,
-                      Boolean(formErrors.featuredImage) && styles.featuredUploadBoxError,
-                    ]}
-                    onPress={handlePickFeaturedImage}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.featuredIconCircle}>
-                      <Camera size={22} color={formErrors.featuredImage ? '#ef4444' : NexoraColors.primary} />
+
+                  {/* 2. Gallery Images (Optional) */}
+                  <View style={styles.formGroup}>
+                    <View style={styles.labelRow}>
+                      <Text style={styles.inputGroupLabel}>Gallery Images</Text>
+                      <Text style={styles.optionalTag}> (Optional - Up to 5 additional photos)</Text>
                     </View>
-                    <Text
-                      style={[
-                        styles.featuredUploadTitle,
-                        Boolean(formErrors.featuredImage) && styles.featuredUploadTitleError,
-                      ]}
-                    >
-                      Choose Featured Cover Photo *
-                    </Text>
-                    <Text style={styles.featuredUploadSubtitle}>
-                      Required • JPG, PNG or WEBP (1:1 Square recommended)
-                    </Text>
-                  </TouchableOpacity>
-                )}
-                {formErrors.featuredImage ? (
-                  <Text style={styles.fieldErrorText}>{formErrors.featuredImage}</Text>
-                ) : null}
-              </View>
 
-              {/* 2. Gallery Images (Optional) */}
-              <View style={styles.formGroup}>
-                <View style={styles.labelRow}>
-                  <Text style={styles.inputGroupLabel}>Gallery Images</Text>
-                  <Text style={styles.optionalTag}> (Optional - Up to 5 additional photos)</Text>
-                </View>
-
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoScroll}>
-                  {formGalleryImages.length < 5 ? (
-                    <TouchableOpacity
-                      style={styles.uploadPhotoBtn}
-                      onPress={handlePickGalleryImage}
-                      activeOpacity={0.8}
-                    >
-                      <Plus size={18} color={NexoraColors.primary} />
-                      <Text style={styles.uploadPhotoText}>Add Photo</Text>
-                    </TouchableOpacity>
-                  ) : null}
-
-                  {formGalleryImages.map((uri, idx) => (
-                    <View key={uri + idx} style={styles.photoPreviewCard}>
-                      <Image source={{ uri }} style={styles.photoPreviewImg} />
-                      <TouchableOpacity
-                        style={styles.removePhotoBtn}
-                        onPress={() => handleRemoveGalleryImage(idx)}
-                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                      >
-                        <X size={12} color="#ffffff" />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
-
-              {/* Product Title (Required) */}
-              <NexoraInput
-                label="Product Title"
-                required
-                placeholder="e.g. Commercial Grade PEX-A Pipe Coil (100ft)"
-                value={formName}
-                onChangeText={(t) => {
-                  setFormName(t);
-                  if (formErrors.name) setFormErrors((p) => ({ ...p, name: '' }));
-                }}
-                error={formErrors.name}
-              />
-
-              {/* Autocomplete Category Search Dropdown (Required) */}
-              <View style={styles.formGroup}>
-                <View style={styles.labelRow}>
-                  <Text style={styles.inputGroupLabel}>Store Category</Text>
-                  <Text style={styles.requiredAsterisk}> *</Text>
-                </View>
-
-                {/* Dropdown Toggle Trigger Button */}
-                <TouchableOpacity
-                  style={[
-                    styles.categorySelectBtn,
-                    Boolean(formErrors.category) && styles.categorySelectBtnError,
-                    catDropdownOpen && styles.categorySelectBtnOpen,
-                  ]}
-                  onPress={() => setCatDropdownOpen(!catDropdownOpen)}
-                  activeOpacity={0.8}
-                >
-                  <View style={styles.categorySelectLeft}>
-                    <Tag size={16} color={selectedCategoryObj ? NexoraColors.primary : NexoraColors.textMuted} />
-                    <Text
-                      style={[
-                        styles.categorySelectText,
-                        !selectedCategoryObj && { color: NexoraColors.textMuted },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {selectedCategoryObj ? selectedCategoryObj.name : 'Select or search store category...'}
-                    </Text>
-                  </View>
-                  <ChevronDown
-                    size={18}
-                    color={NexoraColors.textSecondary}
-                    style={{ transform: [{ rotate: catDropdownOpen ? '180deg' : '0deg' }] }}
-                  />
-                </TouchableOpacity>
-
-                {formErrors.category ? (
-                  <Text style={styles.fieldErrorText}>{formErrors.category}</Text>
-                ) : null}
-
-                {/* Expandable Autocomplete Dropdown List */}
-                {catDropdownOpen ? (
-                  <View style={styles.dropdownCard}>
-                    <View style={styles.dropdownSearchWrap}>
-                      <Search size={15} color={NexoraColors.textMuted} />
-                      <TextInput
-                        style={styles.dropdownSearchInput}
-                        placeholder="Search categories (e.g. Plumbing, Wiring, Tools)..."
-                        placeholderTextColor={NexoraColors.textMuted}
-                        value={catSearchQuery}
-                        onChangeText={setCatSearchQuery}
-                        autoFocus
-                      />
-                      {catSearchQuery ? (
-                        <TouchableOpacity onPress={() => setCatSearchQuery('')}>
-                          <X size={15} color={NexoraColors.textMuted} />
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoScroll}>
+                      {formGalleryImages.length < 5 ? (
+                        <TouchableOpacity
+                          style={styles.uploadPhotoBtn}
+                          onPress={handlePickGalleryImage}
+                          activeOpacity={0.8}
+                        >
+                          <Plus size={18} color={NexoraColors.primary} />
+                          <Text style={styles.uploadPhotoText}>Add Photo</Text>
                         </TouchableOpacity>
                       ) : null}
-                    </View>
 
-                    <ScrollView
-                      style={styles.dropdownList}
-                      nestedScrollEnabled
-                      keyboardShouldPersistTaps="handled"
-                    >
-                      {filteredModalCategories.length === 0 ? (
-                        <View style={styles.dropdownEmpty}>
-                          <Text style={styles.dropdownEmptyText}>No matching categories found</Text>
+                      {formGalleryImages.map((uri, idx) => (
+                        <View key={uri + idx} style={styles.photoPreviewCard}>
+                          <Image source={{ uri }} style={styles.photoPreviewImg} />
+                          <TouchableOpacity
+                            style={styles.removePhotoBtn}
+                            onPress={() => handleRemoveGalleryImage(idx)}
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                          >
+                            <X size={12} color="#ffffff" />
+                          </TouchableOpacity>
                         </View>
-                      ) : (
-                        filteredModalCategories.map((c) => {
-                          const isSelected = formCategoryId === c._id;
-                          return (
-                            <TouchableOpacity
-                              key={c._id}
-                              style={[styles.dropdownItem, isSelected && styles.dropdownItemActive]}
-                              onPress={() => {
-                                setFormCategoryId(c._id);
-                                setCatDropdownOpen(false);
-                                setCatSearchQuery('');
-                                if (c.subcategories && c.subcategories.length > 0) {
-                                  setFormSubcategory(c.subcategories[0].name);
-                                } else {
-                                  setFormSubcategory('');
-                                }
-                                if (formErrors.category) {
-                                  setFormErrors((prev) => ({ ...prev, category: '' }));
-                                }
-                              }}
-                            >
-                              <Text
-                                style={[styles.dropdownItemText, isSelected && styles.dropdownItemTextActive]}
-                              >
-                                {c.name}
-                              </Text>
-                              {isSelected ? <Check size={16} color={NexoraColors.primary} /> : null}
-                            </TouchableOpacity>
-                          );
-                        })
-                      )}
+                      ))}
                     </ScrollView>
                   </View>
-                ) : null}
-              </View>
 
-              {/* Subcategories (if available under chosen category) */}
-              {selectedCategoryObj?.subcategories && selectedCategoryObj.subcategories.length > 0 ? (
-                <View style={styles.formGroup}>
-                  <Text style={styles.inputGroupLabel}>Specialty / Subcategory</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.modalCatScroll}>
-                    {selectedCategoryObj.subcategories.map((sub: any) => {
-                      const isSelected = formSubcategory === sub.name;
-                      return (
-                        <TouchableOpacity
-                          key={sub.name}
-                          style={[styles.modalSubChip, isSelected && styles.modalSubChipActive]}
-                          onPress={() => setFormSubcategory(sub.name)}
+                  {/* Product Title (Required) */}
+                  <NexoraInput
+                    label="Product Title"
+                    required
+                    placeholder="e.g. Commercial Grade PEX-A Pipe Coil (100ft)"
+                    value={formName}
+                    onChangeText={(t) => {
+                      setFormName(t);
+                      if (formErrors.name) setFormErrors((p) => ({ ...p, name: '' }));
+                    }}
+                    error={formErrors.name}
+                  />
+
+                  {/* Autocomplete Category Search Dropdown (Required) */}
+                  <View style={styles.formGroup}>
+                    <View style={styles.labelRow}>
+                      <Text style={styles.inputGroupLabel}>Store Category</Text>
+                      <Text style={styles.requiredAsterisk}> *</Text>
+                    </View>
+
+                    {/* Dropdown Toggle Trigger Button */}
+                    <TouchableOpacity
+                      style={[
+                        styles.categorySelectBtn,
+                        Boolean(formErrors.category) && styles.categorySelectBtnError,
+                        catDropdownOpen && styles.categorySelectBtnOpen,
+                      ]}
+                      onPress={() => setCatDropdownOpen(!catDropdownOpen)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.categorySelectLeft}>
+                        <Tag size={16} color={selectedCategoryObj ? NexoraColors.primary : NexoraColors.textMuted} />
+                        <Text
+                          style={[
+                            styles.categorySelectText,
+                            !selectedCategoryObj && { color: NexoraColors.textMuted },
+                          ]}
+                          numberOfLines={1}
                         >
-                          <Text style={[styles.modalSubChipText, isSelected && styles.modalSubChipTextActive]}>
-                            {sub.name}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                </View>
-              ) : null}
+                          {selectedCategoryObj ? selectedCategoryObj.name : 'Select or search store category...'}
+                        </Text>
+                      </View>
+                      <ChevronDown
+                        size={18}
+                        color={NexoraColors.textSecondary}
+                        style={{ transform: [{ rotate: catDropdownOpen ? '180deg' : '0deg' }] }}
+                      />
+                    </TouchableOpacity>
 
-              {/* Product Condition Selection (New / Old / Refurbished) */}
-              <View style={styles.formGroup}>
-                <View style={styles.labelRow}>
-                  <Text style={styles.inputGroupLabel}>Product Condition</Text>
-                  <Text style={styles.requiredAsterisk}> *</Text>
-                </View>
-                <View style={styles.conditionSelectorRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.conditionPill,
-                      formCondition === 'new' && styles.conditionPillActiveNew,
-                    ]}
-                    onPress={() => setFormCondition('new')}
-                    activeOpacity={0.8}
-                  >
-                    <Sparkles size={14} color={formCondition === 'new' ? '#065f46' : '#64748b'} />
-                    <Text
-                      style={[
-                        styles.conditionPillText,
-                        formCondition === 'new' && styles.conditionPillTextActiveNew,
-                      ]}
+                    {formErrors.category ? (
+                      <Text style={styles.fieldErrorText}>{formErrors.category}</Text>
+                    ) : null}
+
+                    {/* Expandable Autocomplete Dropdown List */}
+                    {catDropdownOpen ? (
+                      <View style={styles.dropdownCard}>
+                        <View style={styles.dropdownSearchWrap}>
+                          <Search size={15} color={NexoraColors.textMuted} />
+                          <TextInput
+                            style={styles.dropdownSearchInput}
+                            placeholder="Search categories (e.g. Plumbing, Wiring, Tools)..."
+                            placeholderTextColor={NexoraColors.textMuted}
+                            value={catSearchQuery}
+                            onChangeText={setCatSearchQuery}
+                            autoFocus
+                          />
+                          {catSearchQuery ? (
+                            <TouchableOpacity onPress={() => setCatSearchQuery('')}>
+                              <X size={15} color={NexoraColors.textMuted} />
+                            </TouchableOpacity>
+                          ) : null}
+                        </View>
+
+                        <ScrollView
+                          style={styles.dropdownList}
+                          nestedScrollEnabled
+                          keyboardShouldPersistTaps="handled"
+                        >
+                          {filteredModalCategories.length === 0 ? (
+                            <View style={styles.dropdownEmpty}>
+                              <Text style={styles.dropdownEmptyText}>No matching categories found</Text>
+                            </View>
+                          ) : (
+                            filteredModalCategories.map((c) => {
+                              const isSelected = formCategoryId === c._id;
+                              return (
+                                <TouchableOpacity
+                                  key={c._id}
+                                  style={[styles.dropdownItem, isSelected && styles.dropdownItemActive]}
+                                  onPress={() => {
+                                    setFormCategoryId(c._id);
+                                    setCatDropdownOpen(false);
+                                    setCatSearchQuery('');
+                                    if (c.subcategories && c.subcategories.length > 0) {
+                                      setFormSubcategory(c.subcategories[0].name);
+                                    } else {
+                                      setFormSubcategory('');
+                                    }
+                                    if (formErrors.category) {
+                                      setFormErrors((prev) => ({ ...prev, category: '' }));
+                                    }
+                                  }}
+                                >
+                                  <Text
+                                    style={[styles.dropdownItemText, isSelected && styles.dropdownItemTextActive]}
+                                  >
+                                    {c.name}
+                                  </Text>
+                                  {isSelected ? <Check size={16} color={NexoraColors.primary} /> : null}
+                                </TouchableOpacity>
+                              );
+                            })
+                          )}
+                        </ScrollView>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  {/* Subcategories (if available under chosen category) */}
+                  {selectedCategoryObj?.subcategories && selectedCategoryObj.subcategories.length > 0 ? (
+                    <View style={styles.formGroup}>
+                      <Text style={styles.inputGroupLabel}>Specialty / Subcategory</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.modalCatScroll}>
+                        {selectedCategoryObj.subcategories.map((sub: any) => {
+                          const isSelected = formSubcategory === sub.name;
+                          return (
+                            <TouchableOpacity
+                              key={sub.name}
+                              style={[styles.modalSubChip, isSelected && styles.modalSubChipActive]}
+                              onPress={() => setFormSubcategory(sub.name)}
+                            >
+                              <Text style={[styles.modalSubChipText, isSelected && styles.modalSubChipTextActive]}>
+                                {sub.name}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  ) : null}
+
+                  {/* Product Condition Selection (New / Old / Refurbished) */}
+                  <View style={styles.formGroup}>
+                    <View style={styles.labelRow}>
+                      <Text style={styles.inputGroupLabel}>Product Condition</Text>
+                      <Text style={styles.requiredAsterisk}> *</Text>
+                    </View>
+                    <View style={styles.conditionSelectorRow}>
+                      <TouchableOpacity
+                        style={[
+                          styles.conditionPill,
+                          formCondition === 'new' && styles.conditionPillActiveNew,
+                        ]}
+                        onPress={() => setFormCondition('new')}
+                        activeOpacity={0.8}
+                      >
+                        <Sparkles size={14} color={formCondition === 'new' ? '#065f46' : '#64748b'} />
+                        <Text
+                          style={[
+                            styles.conditionPillText,
+                            formCondition === 'new' && styles.conditionPillTextActiveNew,
+                          ]}
+                        >
+                          Brand New
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.conditionPill,
+                          formCondition === 'refurbished' && styles.conditionPillActiveRefurbished,
+                        ]}
+                        onPress={() => setFormCondition('refurbished')}
+                        activeOpacity={0.8}
+                      >
+                        <RotateCcw size={14} color={formCondition === 'refurbished' ? '#1e40af' : '#64748b'} />
+                        <Text
+                          style={[
+                            styles.conditionPillText,
+                            formCondition === 'refurbished' && styles.conditionPillTextActiveRefurbished,
+                          ]}
+                        >
+                          Refurbished
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.conditionPill,
+                          formCondition === 'old' && styles.conditionPillActiveOld,
+                        ]}
+                        onPress={() => setFormCondition('old')}
+                        activeOpacity={0.8}
+                      >
+                        <Tag size={14} color={formCondition === 'old' ? '#92400e' : '#64748b'} />
+                        <Text
+                          style={[
+                            styles.conditionPillText,
+                            formCondition === 'old' && styles.conditionPillTextActiveOld,
+                          ]}
+                        >
+                          Used / Old
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Price & MSRP (Price is Required) */}
+                  <View style={styles.modalRow}>
+                    <View style={{ flex: 1 }}>
+                      <NexoraInput
+                        label="Retail Price ($)"
+                        required
+                        placeholder="89.00"
+                        value={formPrice}
+                        onChangeText={(t) => {
+                          setFormPrice(t);
+                          if (formErrors.price) setFormErrors((p) => ({ ...p, price: '' }));
+                        }}
+                        keyboardType="decimal-pad"
+                        error={formErrors.price}
+                      />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <NexoraInput
+                        label="MSRP / Original ($)"
+                        placeholder="105.00"
+                        value={formComparePrice}
+                        onChangeText={setFormComparePrice}
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+                  </View>
+
+                  {/* Stock (Required) & Low Stock Alert */}
+                  <View style={styles.modalRow}>
+                    <View style={{ flex: 1 }}>
+                      <NexoraInput
+                        label="Initial Stock"
+                        required
+                        placeholder="25"
+                        value={formStock}
+                        onChangeText={(t) => {
+                          setFormStock(t);
+                          if (formErrors.stock) setFormErrors((p) => ({ ...p, stock: '' }));
+                        }}
+                        keyboardType="number-pad"
+                        error={formErrors.stock}
+                      />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <NexoraInput
+                        label="Low Stock Alert"
+                        placeholder={String(settings.lowStockThreshold || 5)}
+                        value={formLowStock}
+                        onChangeText={setFormLowStock}
+                        keyboardType="number-pad"
+                      />
+                    </View>
+                  </View>
+
+                  <NexoraInput
+                    label="Product Details / Specifications"
+                    placeholder="Include dimensions, materials, and warranty information..."
+                    value={formDescription}
+                    onChangeText={setFormDescription}
+                    multiline
+                    numberOfLines={3}
+                  />
+
+                  {/* Fulfillment Checkboxes */}
+                  <Text style={[styles.inputGroupLabel, { marginBottom: 7 }]}>Fulfillment Options</Text>
+                  <View style={styles.fulfillmentWrap}>
+                    <TouchableOpacity
+                      style={[styles.fulfillmentOption, formPickup && styles.fulfillmentOptionActive]}
+                      onPress={() => setFormPickup(!formPickup)}
                     >
-                      Brand New
-                    </Text>
-                  </TouchableOpacity>
+                      <Building2 size={16} color={formPickup ? NexoraColors.primary : NexoraColors.textSecondary} />
+                      <Text style={[styles.fulfillmentText, formPickup && styles.fulfillmentTextActive]}>
+                        Store / Yard Pickup
+                      </Text>
+                    </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={[
-                      styles.conditionPill,
-                      formCondition === 'refurbished' && styles.conditionPillActiveRefurbished,
-                    ]}
-                    onPress={() => setFormCondition('refurbished')}
-                    activeOpacity={0.8}
-                  >
-                    <RotateCcw size={14} color={formCondition === 'refurbished' ? '#1e40af' : '#64748b'} />
-                    <Text
-                      style={[
-                        styles.conditionPillText,
-                        formCondition === 'refurbished' && styles.conditionPillTextActiveRefurbished,
-                      ]}
+                    <TouchableOpacity
+                      style={[styles.fulfillmentOption, formDelivery && styles.fulfillmentOptionActive]}
+                      onPress={() => setFormDelivery(!formDelivery)}
                     >
-                      Refurbished
-                    </Text>
-                  </TouchableOpacity>
+                      <Truck size={16} color={formDelivery ? NexoraColors.primary : NexoraColors.textSecondary} />
+                      <Text style={[styles.fulfillmentText, formDelivery && styles.fulfillmentTextActive]}>
+                        Seller Delivery
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
 
-                  <TouchableOpacity
-                    style={[
-                      styles.conditionPill,
-                      formCondition === 'old' && styles.conditionPillActiveOld,
-                    ]}
-                    onPress={() => setFormCondition('old')}
-                    activeOpacity={0.8}
-                  >
-                    <Tag size={14} color={formCondition === 'old' ? '#92400e' : '#64748b'} />
-                    <Text
-                      style={[
-                        styles.conditionPillText,
-                        formCondition === 'old' && styles.conditionPillTextActiveOld,
-                      ]}
-                    >
-                      Used / Old
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+                  {formDelivery ? (
+                    <NexoraInput
+                      label="Local Delivery Fee ($)"
+                      placeholder="15.00"
+                      value={formDeliveryFee}
+                      onChangeText={setFormDeliveryFee}
+                      keyboardType="decimal-pad"
+                    />
+                  ) : null}
 
-              {/* Price & MSRP (Price is Required) */}
-              <View style={styles.modalRow}>
-                <View style={{ flex: 1 }}>
-                  <NexoraInput
-                    label="Retail Price ($)"
-                    required
-                    placeholder="89.00"
-                    value={formPrice}
-                    onChangeText={(t) => {
-                      setFormPrice(t);
-                      if (formErrors.price) setFormErrors((p) => ({ ...p, price: '' }));
-                    }}
-                    keyboardType="decimal-pad"
-                    error={formErrors.price}
+                  <NexoraButton
+                    title={
+                      submitting
+                        ? editingProduct
+                          ? 'Saving SKU...'
+                          : 'Publishing SKU...'
+                        : editingProduct
+                          ? 'Save Changes'
+                          : 'Publish Product to Storefront'
+                    }
+                    onPress={handleCreateProduct}
+                    loading={submitting}
+                    style={{ marginTop: 14 }}
                   />
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <NexoraInput
-                    label="MSRP / Original ($)"
-                    placeholder="105.00"
-                    value={formComparePrice}
-                    onChangeText={setFormComparePrice}
-                    keyboardType="decimal-pad"
-                  />
-                </View>
+                </ScrollView>
               </View>
-
-              {/* Stock (Required) & Low Stock Alert */}
-              <View style={styles.modalRow}>
-                <View style={{ flex: 1 }}>
-                  <NexoraInput
-                    label="Initial Stock"
-                    required
-                    placeholder="25"
-                    value={formStock}
-                    onChangeText={(t) => {
-                      setFormStock(t);
-                      if (formErrors.stock) setFormErrors((p) => ({ ...p, stock: '' }));
-                    }}
-                    keyboardType="number-pad"
-                    error={formErrors.stock}
-                  />
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <NexoraInput
-                    label="Low Stock Alert"
-                    placeholder={String(settings.lowStockThreshold || 5)}
-                    value={formLowStock}
-                    onChangeText={setFormLowStock}
-                    keyboardType="number-pad"
-                  />
-                </View>
-              </View>
-
-              <NexoraInput
-                label="Product Details / Specifications"
-                placeholder="Include dimensions, materials, and warranty information..."
-                value={formDescription}
-                onChangeText={setFormDescription}
-                multiline
-                numberOfLines={3}
-              />
-
-              {/* Fulfillment Checkboxes */}
-              <Text style={styles.inputGroupLabel}>Fulfillment Options</Text>
-              <View style={styles.fulfillmentWrap}>
-                <TouchableOpacity
-                  style={[styles.fulfillmentOption, formPickup && styles.fulfillmentOptionActive]}
-                  onPress={() => setFormPickup(!formPickup)}
-                >
-                  <Building2 size={16} color={formPickup ? NexoraColors.primary : NexoraColors.textSecondary} />
-                  <Text style={[styles.fulfillmentText, formPickup && styles.fulfillmentTextActive]}>
-                    Store / Yard Pickup
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.fulfillmentOption, formDelivery && styles.fulfillmentOptionActive]}
-                  onPress={() => setFormDelivery(!formDelivery)}
-                >
-                  <Truck size={16} color={formDelivery ? NexoraColors.primary : NexoraColors.textSecondary} />
-                  <Text style={[styles.fulfillmentText, formDelivery && styles.fulfillmentTextActive]}>
-                    Seller Delivery
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {formDelivery ? (
-                <NexoraInput
-                  label="Local Delivery Fee ($)"
-                  placeholder="15.00"
-                  value={formDeliveryFee}
-                  onChangeText={setFormDeliveryFee}
-                  keyboardType="decimal-pad"
-                />
-              ) : null}
-
-              <NexoraButton
-                title={
-                  submitting
-                    ? editingProduct
-                      ? 'Saving SKU...'
-                      : 'Publishing SKU...'
-                    : editingProduct
-                    ? 'Save Changes'
-                    : 'Publish Product to Storefront'
-                }
-                onPress={handleCreateProduct}
-                loading={submitting}
-                style={{ marginTop: 14 }}
-              />
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-      </>
+            </KeyboardAvoidingView>
+          </Modal>
+        </>
       )}
       {/* Single Product Details Modal */}
       <ProductDetailsModal
