@@ -25,6 +25,7 @@ export interface Product {
   category: string | { _id: string; name: string };
   categoryName?: string;
   subcategory?: string;
+  condition?: 'new' | 'old' | 'refurbished';
   price: number;
   compareAtPrice?: number | null;
   costPerItem?: number | null;
@@ -44,6 +45,7 @@ export interface CreateProductInput {
   description?: string;
   categoryId: string;
   subcategory?: string;
+  condition?: 'new' | 'old' | 'refurbished';
   price: number;
   compareAtPrice?: number | null;
   stock: number;
@@ -57,6 +59,7 @@ export interface UpdateProductInput {
   description?: string;
   categoryId?: string;
   subcategory?: string;
+  condition?: 'new' | 'old' | 'refurbished';
   price?: number;
   compareAtPrice?: number | null;
   stock?: number;
@@ -71,6 +74,7 @@ export interface SellerProductQuery {
   limit?: number;
   search?: string;
   category?: string;
+  condition?: 'new' | 'old' | 'refurbished';
   status?: 'all' | 'active' | 'out_of_stock';
 }
 

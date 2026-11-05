@@ -23,7 +23,9 @@ import {
   AlertTriangle,
   Minus,
   Plus,
-  Pencil
+  Pencil,
+  Sparkles,
+  RotateCcw
 } from 'lucide-react-native';
 import { NexoraColors, Radius, Shadows } from '@/constants/theme';
 import { StatusBadge } from '@/components/common/StatusBadge';
@@ -127,6 +129,42 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                 <View style={styles.skuPill}>
                   <Tag size={11} color="#64748b" />
                   <Text style={styles.skuPillText}>SKU: {product.sku || 'NX-SKU'}</Text>
+                </View>
+
+                {/* Condition Pill */}
+                <View
+                  style={[
+                    styles.conditionPill,
+                    product.condition === 'refurbished'
+                      ? styles.conditionPillRefurbished
+                      : product.condition === 'old'
+                      ? styles.conditionPillOld
+                      : styles.conditionPillNew
+                  ]}
+                >
+                  {product.condition === 'refurbished' ? (
+                    <RotateCcw size={11} color="#1d4ed8" />
+                  ) : product.condition === 'old' ? (
+                    <Tag size={11} color="#b45309" />
+                  ) : (
+                    <Sparkles size={11} color="#047857" />
+                  )}
+                  <Text
+                    style={[
+                      styles.conditionPillText,
+                      product.condition === 'refurbished'
+                        ? { color: '#1d4ed8' }
+                        : product.condition === 'old'
+                        ? { color: '#b45309' }
+                        : { color: '#047857' }
+                    ]}
+                  >
+                    {product.condition === 'refurbished'
+                      ? 'Refurbished'
+                      : product.condition === 'old'
+                      ? 'Used / Pre-Owned'
+                      : 'Brand New'}
+                  </Text>
                 </View>
               </View>
 
@@ -507,6 +545,31 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#64748b'
+  },
+  conditionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1
+  },
+  conditionPillNew: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#a7f3d0'
+  },
+  conditionPillRefurbished: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#bfdbfe'
+  },
+  conditionPillOld: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a'
+  },
+  conditionPillText: {
+    fontSize: 11,
+    fontWeight: '700'
   },
   fieldSectionTitle: {
     fontSize: 13,

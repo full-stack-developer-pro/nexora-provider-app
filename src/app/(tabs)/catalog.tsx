@@ -37,7 +37,9 @@ import {
   Barcode,
   Camera,
   Image as ImageIcon,
-  Minus
+  Minus,
+  Sparkles,
+  RotateCcw
 } from 'lucide-react-native';
 import { NexoraColors, Radius, Shadows } from '@/constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -141,6 +143,7 @@ export default function CatalogScreen() {
   const [formSku, setFormSku] = useState('');
   const [formCategoryId, setFormCategoryId] = useState('');
   const [formSubcategory, setFormSubcategory] = useState('');
+  const [formCondition, setFormCondition] = useState<'new' | 'old' | 'refurbished'>('new');
   const [formPrice, setFormPrice] = useState('');
   const [formComparePrice, setFormComparePrice] = useState('');
   const [formStock, setFormStock] = useState('20');
@@ -421,6 +424,7 @@ export default function CatalogScreen() {
         description: formDescription.trim(),
         categoryId: formCategoryId,
         subcategory: formSubcategory.trim(),
+        condition: formCondition,
         price: parseFloat(formPrice),
         compareAtPrice: formComparePrice.trim() ? parseFloat(formComparePrice) : null,
         stock: parseInt(formStock, 10) || 0,
@@ -469,6 +473,7 @@ export default function CatalogScreen() {
     const catId = typeof product.category === 'object' ? product.category._id : product.category;
     setFormCategoryId(catId || '');
     setFormSubcategory(product.subcategory || '');
+    setFormCondition(product.condition || 'new');
     setFormFeaturedImage(product.images?.[0]?.url || null);
     setFormGalleryImages(product.images?.slice(1).map((i) => i.url) || []);
     setFormPickup(product.fulfillment?.pickup ?? true);
@@ -487,6 +492,7 @@ export default function CatalogScreen() {
     setFormComparePrice('');
     setFormStock('20');
     setFormLowStock(String(settings.lowStockThreshold || 5));
+    setFormCondition('new');
     setFormFeaturedImage(null);
     setFormGalleryImages([]);
     setCatDropdownOpen(false);
@@ -839,6 +845,35 @@ export default function CatalogScreen() {
                         </Text>
                       </View>
 
+                      {/* Condition Chip */}
+                      <View
+                        style={[
+                          styles.metaChip,
+                          item.condition === 'refurbished'
+                            ? { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }
+                            : item.condition === 'old'
+                            ? { backgroundColor: '#fef3c7', borderColor: '#fde68a' }
+                            : { backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' }
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.metaChipText,
+                            item.condition === 'refurbished'
+                              ? { color: '#1d4ed8' }
+                              : item.condition === 'old'
+                              ? { color: '#b45309' }
+                              : { color: '#047857' }
+                          ]}
+                        >
+                          {item.condition === 'refurbished'
+                            ? 'Refurbished'
+                            : item.condition === 'old'
+                            ? 'Used'
+                            : 'New'}
+                        </Text>
+                      </View>
+
                       <View
                         style={[
                           styles.metaChip,
@@ -1181,6 +1216,72 @@ export default function CatalogScreen() {
                   </ScrollView>
                 </View>
               ) : null}
+
+              {/* Product Condition Selection (New / Old / Refurbished) */}
+              <View style={styles.formGroup}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.inputGroupLabel}>Product Condition</Text>
+                  <Text style={styles.requiredAsterisk}> *</Text>
+                </View>
+                <View style={styles.conditionSelectorRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.conditionPill,
+                      formCondition === 'new' && styles.conditionPillActiveNew,
+                    ]}
+                    onPress={() => setFormCondition('new')}
+                    activeOpacity={0.8}
+                  >
+                    <Sparkles size={14} color={formCondition === 'new' ? '#065f46' : '#64748b'} />
+                    <Text
+                      style={[
+                        styles.conditionPillText,
+                        formCondition === 'new' && styles.conditionPillTextActiveNew,
+                      ]}
+                    >
+                      Brand New
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.conditionPill,
+                      formCondition === 'refurbished' && styles.conditionPillActiveRefurbished,
+                    ]}
+                    onPress={() => setFormCondition('refurbished')}
+                    activeOpacity={0.8}
+                  >
+                    <RotateCcw size={14} color={formCondition === 'refurbished' ? '#1e40af' : '#64748b'} />
+                    <Text
+                      style={[
+                        styles.conditionPillText,
+                        formCondition === 'refurbished' && styles.conditionPillTextActiveRefurbished,
+                      ]}
+                    >
+                      Refurbished
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.conditionPill,
+                      formCondition === 'old' && styles.conditionPillActiveOld,
+                    ]}
+                    onPress={() => setFormCondition('old')}
+                    activeOpacity={0.8}
+                  >
+                    <Tag size={14} color={formCondition === 'old' ? '#92400e' : '#64748b'} />
+                    <Text
+                      style={[
+                        styles.conditionPillText,
+                        formCondition === 'old' && styles.conditionPillTextActiveOld,
+                      ]}
+                    >
+                      Used / Old
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
 
               {/* Price & MSRP (Price is Required) */}
               <View style={styles.modalRow}>
@@ -2037,6 +2138,53 @@ const styles = StyleSheet.create({
   },
   modalSubChipTextActive: {
     color: '#0369a1',
+    fontWeight: '700',
+  },
+  conditionSelectorRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 6,
+  },
+  conditionPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+  },
+  conditionPillActiveNew: {
+    borderColor: '#10b981',
+    backgroundColor: '#ecfdf5',
+  },
+  conditionPillActiveRefurbished: {
+    borderColor: '#3b82f6',
+    backgroundColor: '#eff6ff',
+  },
+  conditionPillActiveOld: {
+    borderColor: '#f59e0b',
+    backgroundColor: '#fffbeb',
+  },
+  conditionPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  conditionPillTextActiveNew: {
+    color: '#065f46',
+    fontWeight: '700',
+  },
+  conditionPillTextActiveRefurbished: {
+    color: '#1e40af',
+    fontWeight: '700',
+  },
+  conditionPillTextActiveOld: {
+    color: '#92400e',
     fontWeight: '700',
   },
   modalRow: {
