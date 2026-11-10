@@ -2,6 +2,7 @@
   "extends": "expo/tsconfig.base.json",
   "compilerOptions": {
     "strict": true,
+    "module": "preserve",
     "moduleResolution": "bundler",
     "customConditions": ["react-native"],
     "skipLibCheck": true,
