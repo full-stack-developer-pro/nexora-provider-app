@@ -81,6 +81,7 @@ export const PostServiceModal: React.FC<PostServiceModalProps> = ({
   // State
   const [catDropdownOpen, setCatDropdownOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [coordinates, setCoordinates] = useState<{ lat?: number | null; lng?: number | null } | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Prefill or reset form when modal opens
@@ -99,6 +100,7 @@ export const PostServiceModal: React.FC<PostServiceModalProps> = ({
       setDuration(initialService.duration !== undefined ? String(initialService.duration) : '60');
       setCity(initialService.serviceLocation?.city || defaultLocation?.city || '');
       setAddress(initialService.serviceLocation?.address || defaultLocation?.address || '');
+      setCoordinates(initialService.serviceLocation?.coordinates || null);
       setRadiusMiles(
         String(
           initialService.serviceLocation?.serviceRadiusMiles ||
@@ -120,6 +122,7 @@ export const PostServiceModal: React.FC<PostServiceModalProps> = ({
       setDuration('60');
       setCity(defaultLocation?.city || '');
       setAddress(defaultLocation?.address || '');
+      setCoordinates(null);
       setRadiusMiles(
         String(defaultLocation?.radiusMiles || settings.defaultDispatchRadiusMiles || '25')
       );
@@ -297,7 +300,11 @@ export const PostServiceModal: React.FC<PostServiceModalProps> = ({
           city: city.trim(),
           address: address.trim(),
           serviceRadiusMiles: Number(radiusMiles) || 25,
-          serviceRadiusKm: Number(radiusMiles) || 25
+          serviceRadiusKm: Number(radiusMiles) || 25,
+          coordinates: {
+            lat: coordinates?.lat ?? initialService?.serviceLocation?.coordinates?.lat ?? null,
+            lng: coordinates?.lng ?? initialService?.serviceLocation?.coordinates?.lng ?? null
+          }
         }
       };
 
@@ -630,6 +637,15 @@ export const PostServiceModal: React.FC<PostServiceModalProps> = ({
                     </TouchableOpacity>
                   ))}
                 </View>
+              </View>
+
+              <View style={styles.geoNoteBox}>
+                <MapPin size={14} color="#084e8a" />
+                <Text style={styles.geoNoteText}>
+                  {coordinates?.lat && coordinates?.lng
+                    ? `GPS Locked: ${Number(coordinates.lat).toFixed(3)}, ${Number(coordinates.lng).toFixed(3)} • Only customers within ${radiusMiles} mi will see this service.`
+                    : `Auto-Geocoded: When you publish, Nexora pinpoints GPS coordinates to match customers within your ${radiusMiles} mi travel zone.`}
+                </Text>
               </View>
             </View>
 
@@ -979,6 +995,25 @@ const styles = StyleSheet.create({
   radiusPillTextActive: {
     color: NexoraColors.primary,
     fontWeight: '700'
+  },
+  geoNoteBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f0f7ff',
+    borderWidth: 1,
+    borderColor: '#bae0fd',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginTop: 14,
+  },
+  geoNoteText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#084e8a',
+    lineHeight: 16,
+    fontWeight: '500',
   },
   coverPreviewContainer: {
     position: 'relative',
